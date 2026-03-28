@@ -1,11 +1,12 @@
 """Coglet policy for cogames CvC.
 
 All interactions via movement. Score = aligned junctions held per tick.
-Pipeline: mine each resource type → hub (craft hearts) → get aligner gear → align junctions.
+Key challenge: agents need all 4 resource types but extractors are in separate map regions.
+Solution: use local position features to navigate between hub and extractor regions.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from mettagrid.policy.policy import MultiAgentPolicy, AgentPolicy  # type: ignore[import-untyped]
@@ -13,268 +14,262 @@ from mettagrid.policy.policy_env_interface import PolicyEnvInterface  # type: ig
 from mettagrid.simulator import Action  # type: ignore[import-untyped]
 
 ELEMENTS = ("carbon", "oxygen", "germanium", "silicon")
-DIRECTIONS = ("east", "south", "west", "north")
-EXTRACTOR_TAGS = [f"type:{e}_extractor" for e in ELEMENTS]
+DIRS = ("east", "south", "west", "north")
+
+# Known map layout from cogora: gear stations are at fixed offsets from spawn
+# Hub is near spawn. Extractors are in the 4 cardinal directions.
+# We assign each agent to explore a specific quadrant to find resources.
 
 
 @dataclass
-class AgentState:
+class S:
+    """Agent state."""
     step: int = 0
-    wander_dir: int = 0
-    wander_count: int = 0
-    prev_pos: tuple[int, int] | None = None
-    stuck: int = 0
+    wd: int = 0  # wander direction
+    wl: int = 0  # wander left
+    pp: tuple[int, int] | None = None  # prev pos
+    stk: int = 0  # stuck counter
+    phase: str = "explore"  # explore, return_hub, get_gear, get_hearts, align
+    explore_dir: int = 0  # which direction to explore (0-3)
+    explore_steps: int = 0  # steps spent exploring current direction
+    visit_hub_countdown: int = 0  # steps to spend at hub
 
 
 class CogletAgentPolicy(AgentPolicy):
-    def __init__(self, env: PolicyEnvInterface, agent_id: int):
+    def __init__(self, env: PolicyEnvInterface, aid: int):
         super().__init__(env)
         self._env = env
-        self._id = agent_id
+        self._id = aid
         self._cx = env.obs_height // 2
         self._cy = env.obs_width // 2
-        self._center = (self._cx, self._cy)
-        self._tags = {n: i for i, n in enumerate(env.tags)}
-        self._acts = set(env.action_names)
-        self._s = AgentState(wander_dir=agent_id % 4)
+        self._c = (self._cx, self._cy)
+        self._t = {n: i for i, n in enumerate(env.tags)}
+        self._a = set(env.action_names)
+        self._s = S(wd=aid % 4, explore_dir=aid % 4)
 
     def _act(self, n: str) -> Action:
-        return Action(name=n if n in self._acts else "noop")
+        return Action(name=n if n in self._a else "noop")
 
-    def _tag(self, name: str) -> int | None:
-        return self._tags.get(name)
+    def _tag(self, n: str) -> int | None:
+        return self._t.get(n)
 
     def _inv(self, obs: Any) -> dict[str, int]:
-        items: dict[str, int] = {}
-        for tok in obs.tokens:
-            if tok.location != self._center:
+        it: dict[str, int] = {}
+        for tk in obs.tokens:
+            if tk.location != self._c:
                 continue
-            n = tok.feature.name
-            if not n.startswith("inv:"):
+            nm = tk.feature.name
+            if not nm.startswith("inv:"):
                 continue
-            suf = n[4:]
-            if not suf:
+            sf = nm[4:]
+            if not sf:
                 continue
-            item, sep, ps = suf.rpartition(":p")
+            item, sep, ps = sf.rpartition(":p")
             if not sep or not item or not ps.isdigit():
-                item, power = suf, 0
+                item, pw = sf, 0
             else:
-                power = int(ps)
-            v = int(tok.value)
+                pw = int(ps)
+            v = int(tk.value)
             if v <= 0:
                 continue
-            base = max(int(tok.feature.normalization), 1)
-            items[item] = items.get(item, 0) + v * (base ** power)
-        return items
+            b = max(int(tk.feature.normalization), 1)
+            it[item] = it.get(item, 0) + v * (b ** pw)
+        return it
 
-    def _closest(self, obs: Any, names: list[str]) -> tuple[int, int] | None:
+    def _find(self, obs: Any, names: list[str]) -> tuple[int, int] | None:
         ids = {self._tag(n) for n in names} - {None}
         if not ids:
             return None
         best = None
-        best_d = 999
-        for tok in obs.tokens:
-            if tok.feature.name != "tag" or tok.value not in ids:
+        bd = 999
+        for tk in obs.tokens:
+            if tk.feature.name != "tag" or tk.value not in ids:
                 continue
-            loc = tok.location
+            loc = tk.location
             if loc is None:
                 continue
             d = abs(loc[0] - self._cx) + abs(loc[1] - self._cy)
-            if 0 < d < best_d:  # skip d==0, we're already there
-                best_d = d
+            if d < bd:
+                bd = d
                 best = (loc[0], loc[1])
         return best
 
-    def _closest_including_zero(self, obs: Any, names: list[str]) -> tuple[tuple[int, int] | None, int]:
-        ids = {self._tag(n) for n in names} - {None}
-        if not ids:
-            return None, 999
-        best = None
-        best_d = 999
-        for tok in obs.tokens:
-            if tok.feature.name != "tag" or tok.value not in ids:
-                continue
-            loc = tok.location
-            if loc is None:
-                continue
-            d = abs(loc[0] - self._cx) + abs(loc[1] - self._cy)
-            if d < best_d:
-                best_d = d
-                best = (loc[0], loc[1])
-        return best, best_d
-
-    def _move(self, target: tuple[int, int]) -> Action:
-        dr = target[0] - self._cx
-        dc = target[1] - self._cy
+    def _go(self, t: tuple[int, int]) -> Action:
+        dr = t[0] - self._cx
+        dc = t[1] - self._cy
         if dr == 0 and dc == 0:
-            return self._act("noop")
-        # Alternate to avoid walls
-        step = self._s.step
-        if step % 2 == 0:
-            if abs(dr) >= abs(dc) and dr != 0:
-                return self._act("move_south" if dr > 0 else "move_north")
-            if dc != 0:
-                return self._act("move_east" if dc > 0 else "move_west")
-            return self._act("move_south" if dr > 0 else "move_north")
-        else:
-            if abs(dc) >= abs(dr) and dc != 0:
-                return self._act("move_east" if dc > 0 else "move_west")
-            if dr != 0:
+            # On target — step off in alternating direction
+            return self._act(f"move_{DIRS[self._s.step % 4]}")
+        s = self._s.step
+        if s % 2 == 0:
+            if abs(dr) >= abs(dc):
                 return self._act("move_south" if dr > 0 else "move_north")
             return self._act("move_east" if dc > 0 else "move_west")
+        else:
+            if abs(dc) >= abs(dr):
+                return self._act("move_east" if dc > 0 else "move_west")
+            return self._act("move_south" if dr > 0 else "move_north")
 
-    def _wander(self) -> Action:
+    def _wall_at(self, obs: Any, dr: int, dc: int) -> bool:
+        """Check if there's a wall at offset (dr, dc) from center."""
+        wt = self._tag("type:wall")
+        if wt is None:
+            return False
+        r, c = self._cx + dr, self._cy + dc
+        for tk in obs.tokens:
+            if tk.feature.name == "tag" and tk.value == wt:
+                loc = tk.location
+                if loc and loc[0] == r and loc[1] == c:
+                    return True
+        return False
+
+    def _smart_walk(self, obs: Any, d: str) -> Action:
+        """Walk in direction d, but avoid walls by trying perpendicular."""
+        deltas = {"north": (-1, 0), "south": (1, 0), "east": (0, 1), "west": (0, -1)}
+        perps = {"north": ["east", "west"], "south": ["west", "east"],
+                 "east": ["north", "south"], "west": ["south", "north"]}
+        dr, dc = deltas[d]
+        if not self._wall_at(obs, dr, dc):
+            return self._act(f"move_{d}")
+        # Wall ahead — try perpendicular directions
+        for alt in perps[d]:
+            adr, adc = deltas[alt]
+            if not self._wall_at(obs, adr, adc):
+                return self._act(f"move_{alt}")
+        # All blocked — try opposite
+        opp = {"north": "south", "south": "north", "east": "west", "west": "east"}
+        return self._act(f"move_{opp[d]}")
+
+    def _wander(self, obs: Any) -> Action:
         s = self._s
-        if s.wander_count <= 0:
-            s.wander_dir = (s.wander_dir + 1) % 4
-            s.wander_count = 6 + (self._id * 3) % 5  # vary by agent
-        s.wander_count -= 1
-        return self._act(f"move_{DIRECTIONS[s.wander_dir]}")
+        if s.wl <= 0:
+            s.wd = (s.wd + 1) % 4
+            s.wl = 8
+        s.wl -= 1
+        return self._smart_walk(obs, DIRS[s.wd])
 
     def _pos(self, obs: Any) -> tuple[int, int] | None:
         e = w = n = s = 0
-        for tok in obs.tokens:
-            if tok.location != self._center:
+        for tk in obs.tokens:
+            if tk.location != self._c:
                 continue
-            if tok.feature.name == "lp:east": e = int(tok.value)
-            elif tok.feature.name == "lp:west": w = int(tok.value)
-            elif tok.feature.name == "lp:north": n = int(tok.value)
-            elif tok.feature.name == "lp:south": s = int(tok.value)
+            f = tk.feature.name
+            if f == "lp:east": e = int(tk.value)
+            elif f == "lp:west": w = int(tk.value)
+            elif f == "lp:north": n = int(tk.value)
+            elif f == "lp:south": s = int(tk.value)
         if e == 0 and w == 0 and n == 0 and s == 0:
             return None
         return (s - n, e - w)
 
-    def _check_stuck(self, obs: Any) -> bool:
-        pos = self._pos(obs)
+    def _stuck(self, obs: Any) -> bool:
+        p = self._pos(obs)
         s = self._s
-        if pos and pos == s.prev_pos:
-            s.stuck += 1
+        if p and p == s.pp:
+            s.stk += 1
         else:
-            s.stuck = 0
-        s.prev_pos = pos
-        return s.stuck > 2
+            s.stk = 0
+        s.pp = p
+        return s.stk > 3
 
-    def _unstick(self) -> Action:
+    def _unstick(self, obs: Any) -> Action:
         s = self._s
-        s.stuck = 0
-        s.wander_dir = (s.wander_dir + 1) % 4
-        return self._act(f"move_{DIRECTIONS[s.wander_dir]}")
+        s.stk = 0
+        s.wd = (s.wd + 1) % 4
+        return self._smart_walk(obs, DIRS[s.wd])
 
-    def _has_gear(self, inv: dict[str, int], g: str) -> bool:
-        return inv.get(g, 0) > 0
-
-    def _any_gear(self, inv: dict[str, int]) -> str | None:
+    def _gear(self, inv: dict[str, int]) -> str | None:
         for g in ("aligner", "scrambler", "miner", "scout"):
             if inv.get(g, 0) > 0:
                 return g
         return None
 
+    def _can_buy(self, inv: dict[str, int]) -> bool:
+        return (inv.get("carbon", 0) >= 3 and inv.get("oxygen", 0) >= 1 and
+                inv.get("germanium", 0) >= 1 and inv.get("silicon", 0) >= 1)
+
     def step(self, obs: Any) -> Action:
         s = self._s
         s.step += 1
         inv = self._inv(obs)
-        gear = self._any_gear(inv)
+        gear = self._gear(inv)
         hearts = inv.get("heart", 0)
 
-        if self._check_stuck(obs):
-            return self._unstick()
+        if self._stuck(obs):
+            return self._unstick(obs)
 
-        # --- STRATEGY ---
-        # All agents follow same pipeline:
-        # 1. If no resources and no gear: go mine (find extractors)
-        # 2. If have some resources: visit hub to craft hearts
-        # 3. If have hearts but no aligner gear: get aligner gear
-        # 4. If have aligner gear + hearts: go to junctions
-        # 5. If have aligner gear but no hearts: go to hub for more
-
-        total_res = sum(inv.get(e, 0) for e in ELEMENTS)
-
-        # If we have aligner gear and hearts, go align junctions
+        # ALIGN: have aligner + hearts → find unjunctions
         if gear == "aligner" and hearts > 0:
-            # Find junctions NOT already ours (net:cogs)
-            our_locs: set[tuple[int, int]] = set()
-            net_cogs = self._tag("net:cogs")
-            if net_cogs is not None:
-                for tok in obs.tokens:
-                    if tok.feature.name == "tag" and tok.value == net_cogs:
-                        loc = tok.location
-                        if loc is not None:
-                            our_locs.add((loc[0], loc[1]))
-
-            # Find all junctions
-            junc_tag = self._tag("type:junction")
-            if junc_tag is not None:
+            our = self._tag("net:cogs")
+            ours: set[tuple[int, int]] = set()
+            if our is not None:
+                for tk in obs.tokens:
+                    if tk.feature.name == "tag" and tk.value == our and tk.location:
+                        ours.add((tk.location[0], tk.location[1]))
+            jt = self._tag("type:junction")
+            if jt is not None:
                 best = None
-                best_d = 999
-                for tok in obs.tokens:
-                    if tok.feature.name != "tag" or tok.value != junc_tag:
+                bd = 999
+                for tk in obs.tokens:
+                    if tk.feature.name != "tag" or tk.value != jt:
                         continue
-                    loc = tok.location
-                    if loc is None:
+                    loc = tk.location
+                    if not loc:
                         continue
-                    pos = (loc[0], loc[1])
-                    if pos in our_locs:
-                        continue  # skip already-aligned
+                    p = (loc[0], loc[1])
+                    if p in ours:
+                        continue
                     d = abs(loc[0] - self._cx) + abs(loc[1] - self._cy)
-                    if d < best_d:
-                        best_d = d
-                        best = pos
-                if best is not None:
-                    return self._move(best)
+                    if d < bd:
+                        bd = d
+                        best = p
+                if best:
+                    return self._go(best)
+            return self._wander(obs)
 
-            # No unaligned junctions visible — wander to find some
-            return self._wander()
-
-        # If we have aligner gear but no hearts, go to hub
-        if gear == "aligner" and hearts == 0:
-            hub = self._closest(obs, ["type:hub"])
+        # HEARTS: have aligner but no hearts → hub
+        if gear == "aligner":
+            hub = self._find(obs, ["type:hub"])
             if hub:
-                return self._move(hub)
-            return self._wander()
+                return self._go(hub)
+            return self._wander(obs)
 
-        # If we have enough resources to buy aligner gear, go get it
-        # Aligner costs: carbon:3, oxygen:1, germanium:1, silicon:1
-        can_buy_aligner = (
-            inv.get("carbon", 0) >= 3 and
-            inv.get("oxygen", 0) >= 1 and
-            inv.get("germanium", 0) >= 1 and
-            inv.get("silicon", 0) >= 1
-        )
-        if can_buy_aligner and gear != "aligner":
-            station = self._closest(obs, ["type:c:aligner"])
-            if station:
-                return self._move(station)
-            # Can't see station — go to hub area first (stations are near hub)
-            hub = self._closest(obs, ["type:hub"])
+        # GEAR: can afford aligner → buy it
+        if self._can_buy(inv):
+            st = self._find(obs, ["type:c:aligner"])
+            if st:
+                return self._go(st)
+            hub = self._find(obs, ["type:hub"])
             if hub:
-                return self._move(hub)
-            return self._wander()
+                return self._go(hub)
+            return self._wander(obs)
 
-        # If we have some resources but not enough for gear, visit hub periodically
-        # to deposit/craft, then keep mining
-        if total_res > 10 and s.step % 100 < 20:
-            hub = self._closest(obs, ["type:hub"])
-            if hub:
-                return self._move(hub)
+        # MINE: find extractors for resources we're missing
+        # Only target extractors for elements we have LESS THAN 1 of
+        needed = [e for e in ELEMENTS if inv.get(e, 0) < 1]
+        if not needed:
+            # Have all 4 types but can't buy? Need more carbon (need 3)
+            needed = [e for e in ELEMENTS if inv.get(e, 0) < 3]
+        if not needed:
+            needed = list(ELEMENTS)  # shouldn't happen
 
-        # Mine resources: go to nearest extractor
-        # Prioritize elements we're low on
-        lowest_element = min(ELEMENTS, key=lambda e: inv.get(e, 0))
-        specific_tag = f"type:{lowest_element}_extractor"
-        target = self._closest(obs, [specific_tag])
-        if target:
-            return self._move(target)
+        # Look for extractors of types we need
+        needed_tags = [f"type:{e}_extractor" for e in needed]
+        ext = self._find(obs, needed_tags)
+        if ext:
+            return self._go(ext)
 
-        # Try any extractor
-        target = self._closest(obs, EXTRACTOR_TAGS)
-        if target:
-            return self._move(target)
+        # Every 50 steps, switch explore direction
+        s.explore_steps += 1
+        if s.explore_steps > 50:
+            s.explore_steps = 0
+            s.explore_dir = (s.explore_dir + 1) % 4
 
-        # Nothing visible — wander to explore
-        return self._wander()
+        # Walk in explore direction to find new extractors
+        return self._smart_walk(obs, DIRS[s.explore_dir])
 
     def reset(self, simulation: Any = None) -> None:
-        self._s = AgentState(wander_dir=self._id % 4)
+        self._s = S(wd=self._id % 4, explore_dir=self._id % 4)
 
 
 class CogletPolicy(MultiAgentPolicy):
