@@ -1,10 +1,10 @@
 {
-  "last_session": "20260329-000000",
-  "best_score": 5.67,
-  "best_version": "coglet-v0:v11",
-  "total_sessions": 1,
+  "last_session": "20260329-001000",
+  "best_score": 1.82,
+  "best_version": "coglet-v0:v12",
+  "total_sessions": 2,
   "policy_name": "coglet-v0",
   "season": "beta-cvc",
   "local_baseline": 1.84,
-  "local_best": 5.67
+  "local_best": 1.82
 }
