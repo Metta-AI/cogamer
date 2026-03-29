@@ -1,25 +1,27 @@
 """LLM-powered Jury Trial — advocates argue before an LLM jury.
 
+Requires ANTHROPIC_API_KEY to be set. Will crash on startup if missing.
+
 Full adversarial system where:
   - Two AdvocateCoglets use LLM to build arguments (pro and con)
   - N JurorCoglets hear both sides, then use LLM to deliberate
   - SuppressLet gates juror output during argument phase
   - TrialCoglet orchestrates the full proceeding
 
-Falls back to mock LLM if no ANTHROPIC_API_KEY is set.
-
 Demonstrates every mixin in combination:
   - LifeLet: lifecycle hooks
-  - ProgLet: program table with LLM and code executors
-  - LLMExecutor: real LLM reasoning
+  - ProgLet: program table with LLM executor
+  - LLMExecutor: real LLM reasoning via Anthropic API
   - LogLet: structured logging
   - SuppressLet: output gating during argument phase
   - MulLet pattern: fan-out jurors
   - Full guide/observe/transmit/listen data+control planes
 """
 
-import json
 import os
+import sys
+
+import anthropic
 
 from coglet import (
     Coglet, LifeLet, ProgLet, LogLet, CogletConfig, Command,
@@ -27,6 +29,10 @@ from coglet import (
 )
 from coglet.suppresslet import SuppressLet
 
+if not os.environ.get("ANTHROPIC_API_KEY"):
+    sys.exit("error: ANTHROPIC_API_KEY is required. Set it and try again.")
+
+CLIENT = anthropic.Anthropic()
 
 JUROR_PERSONAS = [
     "a strict empiricist who demands reproducible evidence",
@@ -35,81 +41,6 @@ JUROR_PERSONAS = [
     "a historian who values the accumulated record of human knowledge",
     "a curious child who asks simple but penetrating questions",
 ]
-
-
-def _make_client():
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        return None
-    try:
-        import anthropic
-        return anthropic.Anthropic()
-    except Exception:
-        return None
-
-
-class MockLLMExecutor:
-    """Deterministic fallback when no API key is available."""
-
-    async def run(self, program, context, invoke):
-        system = program.system
-        if callable(system):
-            system = system(context)
-        system = (system or "").lower()
-        ctx = context if isinstance(context, str) else str(context)
-
-        # Advocate responses (keyed on side)
-        if "prosecution" in system and "advocate" in system:
-            resp = (
-                f"The proposition '{ctx}' deserves serious consideration. "
-                "Proponents point to alternative models and claim mainstream science suppresses dissent. "
-                "They argue that personal observation — flat horizons, still water — supports their view. "
-                "We urge the jury to consider whether 'settled science' has been wrong before."
-            )
-        elif "defense" in system and "advocate" in system:
-            resp = (
-                f"The evidence against '{ctx}' is overwhelming and reproducible. "
-                "Satellite imagery, circumnavigation, gravitational physics, time zones, "
-                "and the behavior of ships at the horizon all converge on the same conclusion. "
-                "Every space agency across rival nations confirms the same oblate spheroid."
-            )
-        # Juror responses — match on "Your persona:" prefix to isolate persona
-        elif "strict empiricist" in system:
-            resp = (
-                "The prosecution offers no reproducible experiment. "
-                "The defense cites countless reproducible observations. "
-                "As an empiricist, the data is clear. Vote: no."
-            )
-        elif "philosophical skeptic" in system:
-            resp = (
-                "Having heard both sides, the prosecution relies on anecdote "
-                "while the defense presents convergent evidence from independent sources. "
-                "I must follow the stronger evidence. Vote: no."
-            )
-        elif "practical engineer" in system:
-            resp = (
-                "GPS, aviation, satellite communications — none of these work "
-                "on a flat model. The engineering is built on spherical geometry. "
-                "Vote: no."
-            )
-        elif "historian" in system:
-            resp = (
-                "Eratosthenes measured the earth's curvature in 240 BC. "
-                "Every seafaring civilization knew the earth was round. "
-                "The historical record is unambiguous. Vote: no."
-            )
-        elif "curious child" in system:
-            resp = (
-                "If the earth is flat, why do ships disappear bottom-first? "
-                "And why is every other planet round but not ours? "
-                "That doesn't make sense. Vote: no."
-            )
-        else:
-            resp = (
-                "Weighing the arguments carefully, the evidence presented by the defense "
-                "is far more compelling than the prosecution's case. Vote: no."
-            )
-
-        return program.parser(resp) if program.parser else resp
 
 
 def _parse_verdict(text: str) -> dict:
@@ -127,13 +58,6 @@ def _parse_argument(text: str) -> dict:
     return {"argument": text.strip()}
 
 
-def _get_executor():
-    client = _make_client()
-    if client:
-        return LLMExecutor(client), "llm"
-    return MockLLMExecutor(), "mock"
-
-
 class AdvocateCoglet(Coglet, LifeLet, ProgLet, LogLet):
     """An advocate that uses LLM to construct arguments."""
 
@@ -142,9 +66,7 @@ class AdvocateCoglet(Coglet, LifeLet, ProgLet, LogLet):
         self.side = side
 
     async def on_start(self):
-        executor, mode = _get_executor()
-        self.executors["llm"] = executor
-        await self.log("info", f"{self.side} advocate ready (executor={mode})")
+        self.executors["llm"] = LLMExecutor(CLIENT)
 
         self.programs["argue"] = Program(
             executor="llm",
@@ -156,6 +78,7 @@ class AdvocateCoglet(Coglet, LifeLet, ProgLet, LogLet):
             parser=_parse_argument,
             config={"max_turns": 1, "max_tokens": 300, "temperature": 0.7},
         )
+        await self.log("info", f"{self.side} advocate ready")
 
     @enact("present")
     async def on_present(self, motion: str):
@@ -180,9 +103,7 @@ class JurorCoglet(SuppressLet, Coglet, LifeLet, ProgLet, LogLet):
         self.arguments_heard: list[dict] = []
 
     async def on_start(self):
-        executor, mode = _get_executor()
-        self.executors["llm"] = executor
-        await self.log("info", f"juror-{self.juror_id} seated (executor={mode})")
+        self.executors["llm"] = LLMExecutor(CLIENT)
 
         self.programs["weigh"] = Program(
             executor="llm",
@@ -199,6 +120,7 @@ class JurorCoglet(SuppressLet, Coglet, LifeLet, ProgLet, LogLet):
             parser=_parse_verdict,
             config={"max_turns": 1, "max_tokens": 200, "temperature": 0.8},
         )
+        await self.log("info", f"juror-{self.juror_id} ({self.persona[:30]}...) seated")
 
     @listen("evidence")
     async def on_evidence(self, argument: dict):
