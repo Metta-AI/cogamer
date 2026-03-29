@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from cvc.agent.world_model import WorldModel
 
 _TEMP_BLOCK_STEPS = 10
-_DEFAULT_BOUND_MARGIN = 12
+_DEFAULT_BOUND_MARGIN = 20
 _OSCILLATION_HISTORY_STEPS = 6
 
 
