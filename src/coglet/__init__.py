@@ -11,6 +11,7 @@ from coglet.loglet import LogLet
 from coglet.mullet import MulLet
 from coglet.suppresslet import SuppressLet
 from coglet.trace import CogletTrace
+from coglet.weblet import WebLet, CogWebRegistry, CogWebNode, CogWebSnapshot
 
 __all__ = [
     "Coglet", "listen", "enact",
@@ -21,4 +22,5 @@ __all__ = [
     "ProgLet", "Program", "Executor", "CodeExecutor", "LLMExecutor",
     "GitLet", "LogLet", "MulLet",
     "SuppressLet", "CogletTrace",
+    "WebLet", "CogWebRegistry", "CogWebNode", "CogWebSnapshot",
 ]
