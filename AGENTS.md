@@ -15,20 +15,37 @@ src/coglet/
 ├── __init__.py        # Package exports (all public types)
 ├── coglet.py          # Base Coglet class + @listen/@enact decorators
 ├── channel.py         # Channel, ChannelSubscription, ChannelBus (async pub/sub)
-├���─ handle.py          # Command, CogletConfig, CogletHandle (child references)
+├── handle.py          # Command, CogletConfig, CogletHandle (child references)
 ├── runtime.py         # CogletRuntime (spawn, shutdown, tree, restart, tracing)
 ├── lifelet.py         # LifeLet mixin (on_start/on_stop lifecycle hooks)
 ├── ticklet.py         # TickLet mixin + @every decorator (periodic execution)
 ├── proglet.py         # ProgLet mixin (unified program table with pluggable executors)
-├── llm_executor.py   # LLMExecutor (multi-turn LLM conversations with tool use)
+├── llm_executor.py    # LLMExecutor (multi-turn LLM conversations with tool use)
 ├── gitlet.py          # GitLet mixin (repo-as-policy, git patches)
 ├── loglet.py          # LogLet mixin (separate log channel with levels)
 ├── mullet.py          # MulLet mixin (fan-out N children, scatter/gather)
 ├── suppresslet.py     # SuppressLet mixin (gate channels/commands)
+├── weblet.py          # WebLet mixin + CogWebRegistry + CogWebSnapshot
 └── trace.py           # CogletTrace (jsonl event recording)
 
+src/cogweb/
+├── __init__.py        # Package init
+├── cli.py             # cogweb CLI (start/stop/restart/ui)
+└── ui/
+    ├── server.py      # CogWebUI — Starlette server (REST + WebSocket)
+    ├── static/        # Legacy index.html + Vite build output (dist/)
+    └── app/           # React Flow frontend source (Vite + TypeScript)
+        ├── src/
+        │   ├── App.tsx         # Main app — ReactFlow canvas + WebSocket glue
+        │   ├── CogletNode.tsx  # Custom node with typed ports + status badge
+        │   ├── Inspector.tsx   # Right panel — node detail + guide commands
+        │   ├── useWebSocket.ts # WebSocket hook with auto-reconnect
+        │   └── types.ts        # Wire types matching Python CogWebSnapshot
+        ├── package.json
+        └── vite.config.ts
+
 cogames/               # CvC player: Coach, PlayerCoglet, PolicyCoglet
-tests/                 # 108 tests across unit + integration
+tests/                 # 220+ tests across unit + integration
 docs/                  # Architecture and design docs
 ```
 
@@ -147,6 +164,15 @@ Order in the class definition matters (MRO). Mixins that override Coglet methods
 - Meta-commands (suppress/unsuppress) always pass through
 - Must appear before Coglet in MRO: `class MyLET(SuppressLet, Coglet): ...`
 
+#### weblet.py — CogWeb Graph Registration
+- `WebLet` mixin — registers a coglet with `CogWebRegistry` on start, deregisters on stop
+- Requires `cogweb: CogWebRegistry` kwarg. Inert (no-op) if not provided.
+- `@enact("cogweb_status")` — set node status from COG or UI
+- `CogWebRegistry` — collects live coglet references, builds fresh snapshots on demand
+- `CogWebSnapshot` — serializable graph: `{nodes: {id: CogWebNode}, edges: [...]}`
+- `CogWebNode` — per-node metadata: class_name, mixins, channels, listen_channels,
+  enact_commands, children, parent_id, config, status, updated_at
+
 ### trace.py — Event Recording
 
 - `CogletTrace(path)` — open a jsonl file for writing
@@ -156,13 +182,156 @@ Order in the class definition matters (MRO). Mixins that override Coglet methods
 
 Each line: `{"t": <seconds_since_start>, "coglet": "ClassName", "op": "transmit"|"enact", "target": "<channel_or_command>", "data": ...}`
 
+## CogWeb — Graph Visualizer
+
+CogWeb is a browser-based graph visualizer and control panel for live coglet
+supervision trees. It renders the graph using [React Flow](https://reactflow.dev/)
+with real-time WebSocket updates from the coglet runtime.
+
+### CLI
+
+```bash
+cogweb start [--port 8787] [--open]   # auto-build frontend + start server
+cogweb stop  [--port 8787]            # stop the server
+cogweb restart [--port 8787]          # stop + rebuild + start
+cogweb ui [--port 8787]               # open browser (auto-starts if needed)
+```
+
+- `start` auto-builds the React Flow frontend (`npm install` + `npm run build`)
+  if `static/dist/index.html` doesn't exist. Subsequent starts skip the build.
+- PID files stored in `~/.cogweb/cogweb-{port}.pid`.
+- Registered as `console_scripts` entry point; also runnable via `python -m cogweb.cli`.
+
+### Architecture
+
+```
+coglet runtime
+    |
+    v
+CogWebRegistry       <-- WebLet mixins register on_start, deregister on_stop
+    |
+    v
+CogWebUI (Starlette)
+    ├── GET  /            serves React Flow SPA (dist/index.html)
+    ├── GET  /api/graph   returns CogWebSnapshot as JSON
+    └── WS   /ws          pushes snapshots every 500ms + accepts control commands
+                |
+                v
+         React Flow app (browser)
+              ├── CogletNode.tsx   — custom node with typed ports
+              ├── Inspector.tsx    — right panel for node detail + guide commands
+              └── useWebSocket.ts  — auto-reconnect WebSocket hook
+```
+
+### WebSocket Protocol
+
+Messages from server to client:
+
+| Type | Payload | When |
+|---|---|---|
+| `snapshot` | `{nodes: {...}, edges: [...]}` | Every 500ms if changed, or on connect |
+| `pong` | — | Response to client ping |
+| `guide_result` | `{node_id, ok, error?}` | After client sends guide command |
+| `status_updated` | `{node_id, status}` | After client changes status |
+| `error` | `{data: "message"}` | On bad input |
+
+Messages from client to server:
+
+| Type | Payload | Purpose |
+|---|---|---|
+| `refresh` | — | Request immediate snapshot |
+| `ping` | — | Keep-alive |
+| `guide` | `{node_id, command, data?}` | Send `@enact` command to a coglet |
+| `set_status` | `{node_id, status}` | Change node status (running/stopped/error) |
+
+### Data Model
+
+`CogWebSnapshot.to_dict()` returns:
+
+```json
+{
+  "nodes": {
+    "MyClass_7f1234abcdef": {
+      "node_id": "MyClass_7f1234abcdef",
+      "class_name": "MyClass",
+      "mixins": ["LifeLet", "TickLet", "WebLet"],
+      "channels": {"result": 2, "log": 1},
+      "listen_channels": ["obs", "config"],
+      "enact_commands": ["reload", "cogweb_status"],
+      "children": ["Worker_7f5678..."],
+      "parent_id": null,
+      "config": {"restart": "on_error", "max_restarts": 3, "backoff_s": 1.0},
+      "status": "running",
+      "updated_at": 12345.678
+    }
+  },
+  "edges": [
+    {"from": "MyClass_7f1234...", "to": "Worker_7f5678...", "channel": "child", "kind": "control"}
+  ]
+}
+```
+
+### Enabling CogWeb on Your Coglets
+
+```python
+from coglet import Coglet, CogletConfig, CogletRuntime, LifeLet
+from coglet.weblet import CogWebRegistry, WebLet
+from cogweb.ui import CogWebUI
+
+class MyNode(Coglet, WebLet, LifeLet):
+    async def on_start(self):
+        await self.create(CogletConfig(cls=Worker, kwargs={"cogweb": self._cogweb}))
+
+class Worker(Coglet, WebLet, LifeLet):
+    pass
+
+# Boot
+registry = CogWebRegistry()
+runtime = CogletRuntime()
+await runtime.spawn(CogletConfig(cls=MyNode, kwargs={"cogweb": registry}))
+
+# Start UI
+ui = CogWebUI(registry, port=8787)
+await ui.start()   # non-blocking
+```
+
+Key points:
+- Pass the **same** `CogWebRegistry` instance to all coglets via `kwargs={"cogweb": registry}`
+- Children inherit the registry if you forward `self._cogweb` in `create()` kwargs
+- `WebLet` is inert if `cogweb=None` — coglets run normally without visualization
+
+### Frontend Development
+
+```bash
+cd src/cogweb/ui/app
+npm install
+npm run dev         # Vite dev server with hot reload (proxies /api + /ws to :8787)
+npm run build       # Production build -> ../static/dist/
+```
+
+The Vite dev server (`npm run dev`) proxies API and WebSocket requests to
+`localhost:8787`, so run the Python server in parallel during development.
+
+### Key Files for Agents
+
+When modifying CogWeb:
+- **Server logic**: `src/cogweb/ui/server.py` — add new WS message types here
+- **CLI**: `src/cogweb/cli.py` — add new subcommands here
+- **Node rendering**: `src/cogweb/ui/app/src/CogletNode.tsx` — modify node appearance
+- **Inspector panel**: `src/cogweb/ui/app/src/Inspector.tsx` — add control actions
+- **Wire types**: `src/cogweb/ui/app/src/types.ts` — must match Python `CogWebSnapshot`
+- **Data model**: `src/coglet/weblet.py` — `CogWebNode`, `CogWebSnapshot`, `CogWebRegistry`
+- **Tests**: `tests/test_cogweb_ui.py` (server), `tests/test_cogweb_cli.py` (CLI)
+
+After changing TypeScript, rebuild with `cd src/cogweb/ui/app && npm run build`.
+
 ## Testing
 
 ```bash
 PYTHONPATH=src python -m pytest tests/ -v
 ```
 
-108 tests, organized by component:
+220+ tests, organized by component:
 - `test_channel.py` — Channel, ChannelSubscription, ChannelBus
 - `test_coglet.py` — Coglet base, decorators, dispatch, COG interface
 - `test_handle.py` — Command, CogletConfig, CogletHandle
@@ -170,6 +339,9 @@ PYTHONPATH=src python -m pytest tests/ -v
 - `test_mixins.py` — LifeLet, TickLet, ProgLet, GitLet, LogLet, MulLet
 - `test_improvements.py` — SuppressLet, tree, trace, ticker errors, restart, on_child_error
 - `test_integration.py` — multi-layer hierarchies, cross-mixin interactions
+- `test_weblet.py` — CogWebRegistry, CogWebSnapshot, WebLet mixin
+- `test_cogweb_ui.py` — REST API, WebSocket, guide commands, status changes
+- `test_cogweb_cli.py` — CLI argument parsing, PID management
 
 ## Key Patterns
 
@@ -184,5 +356,8 @@ so its `transmit()` override intercepts before Coglet's.
 subsequent transmissions from the child.
 
 **Recursive protocol**: the same COG/LET protocol works at every level. A 3-level
-tree (Root → Mid → Leaf) uses the exact same create/observe/guide/listen/enact/transmit
+tree (Root -> Mid -> Leaf) uses the exact same create/observe/guide/listen/enact/transmit
 primitives throughout.
+
+**CogWeb registry forwarding**: when creating children that should appear in CogWeb,
+forward `self._cogweb` in the kwargs: `CogletConfig(cls=Child, kwargs={"cogweb": self._cogweb})`.

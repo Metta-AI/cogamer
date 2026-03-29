@@ -1,11 +1,10 @@
 """cogweb CLI — start/stop/restart the CogWeb graph visualizer.
 
 Usage:
-    cogweb start [--port 8787]      Start the UI server
+    cogweb start [--port 8787]      Build frontend (if needed) and start the UI server
     cogweb stop  [--port 8787]      Stop a running server
     cogweb restart [--port 8787]    Restart the server
     cogweb ui [--port 8787]         Open the UI in a browser
-    cogweb build                    Build the React Flow frontend
 """
 from __future__ import annotations
 
@@ -20,6 +19,7 @@ from pathlib import Path
 
 _PID_DIR = Path.home() / ".cogweb"
 _APP_DIR = Path(__file__).parent / "ui" / "app"
+_DIST_INDEX = Path(__file__).parent / "ui" / "static" / "dist" / "index.html"
 
 
 def _pid_file(port: int) -> Path:
@@ -47,6 +47,33 @@ def _write_pid(port: int, pid: int) -> None:
 
 def _remove_pid(port: int) -> None:
     _pid_file(port).unlink(missing_ok=True)
+
+
+def _ensure_built() -> bool:
+    """Build the React Flow frontend if dist/ is missing. Returns True on success."""
+    if _DIST_INDEX.exists():
+        return True
+
+    if not _APP_DIR.exists():
+        print("Warning: app/ source not found, using legacy UI.", file=sys.stderr)
+        return True  # server will fall back to static/index.html
+
+    node_modules = _APP_DIR / "node_modules"
+    if not node_modules.exists():
+        print("Installing frontend dependencies...")
+        rc = subprocess.run(["npm", "install"], cwd=_APP_DIR).returncode
+        if rc != 0:
+            print("npm install failed", file=sys.stderr)
+            return False
+
+    print("Building frontend...")
+    rc = subprocess.run(["npm", "run", "build"], cwd=_APP_DIR).returncode
+    if rc != 0:
+        print("Frontend build failed", file=sys.stderr)
+        return False
+
+    print("Frontend built.")
+    return True
 
 
 # ── Server script that runs in background ───────────────────────
@@ -83,10 +110,9 @@ def cmd_start(args: argparse.Namespace) -> int:
         print(f"cogweb already running on port {port} (pid {existing})")
         return 1
 
-    # Ensure dist/ exists (build if needed)
-    dist_dir = Path(__file__).parent / "ui" / "static" / "dist" / "index.html"
-    if not dist_dir.exists():
-        print("Built frontend not found. Run 'cogweb build' first, or starting with legacy UI.")
+    # Auto-build frontend
+    if not _ensure_built():
+        return 1
 
     env = os.environ.copy()
     # Ensure src/ is on PYTHONPATH
@@ -169,29 +195,6 @@ def cmd_ui(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_build(args: argparse.Namespace) -> int:
-    if not _APP_DIR.exists():
-        print(f"App directory not found: {_APP_DIR}", file=sys.stderr)
-        return 1
-
-    node_modules = _APP_DIR / "node_modules"
-    if not node_modules.exists():
-        print("Installing dependencies...")
-        rc = subprocess.run(["npm", "install"], cwd=_APP_DIR).returncode
-        if rc != 0:
-            print("npm install failed", file=sys.stderr)
-            return rc
-
-    print("Building frontend...")
-    rc = subprocess.run(["npm", "run", "build"], cwd=_APP_DIR).returncode
-    if rc != 0:
-        print("Build failed", file=sys.stderr)
-        return rc
-
-    print("Build complete. Output: src/cogweb/ui/static/dist/")
-    return 0
-
-
 def _open_browser(port: int) -> None:
     import webbrowser
     url = f"http://localhost:{port}"
@@ -209,7 +212,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command")
 
     # start
-    p_start = sub.add_parser("start", help="Start the CogWeb UI server")
+    p_start = sub.add_parser("start", help="Build frontend (if needed) and start the UI server")
     p_start.add_argument("--port", type=int, default=8787, help="Server port (default: 8787)")
     p_start.add_argument("--open", action="store_true", help="Open browser after starting")
 
@@ -225,9 +228,6 @@ def build_parser() -> argparse.ArgumentParser:
     # ui
     p_ui = sub.add_parser("ui", help="Open the CogWeb UI in a browser (starts server if needed)")
     p_ui.add_argument("--port", type=int, default=8787, help="Server port (default: 8787)")
-
-    # build
-    sub.add_parser("build", help="Build the React Flow frontend")
 
     return parser
 
@@ -245,7 +245,6 @@ def main(argv: list[str] | None = None) -> int:
         "stop": cmd_stop,
         "restart": cmd_restart,
         "ui": cmd_ui,
-        "build": cmd_build,
     }
     return dispatch[args.command](args)
 

@@ -2,13 +2,9 @@
 from __future__ import annotations
 
 import os
-import signal
-import time
 from unittest.mock import patch
 
-import pytest
-
-from cogweb.cli import build_parser, main, _pid_file, _read_pid, _write_pid, _remove_pid
+from cogweb.cli import build_parser, main, _pid_file, _read_pid, _write_pid, _remove_pid, _ensure_built
 
 
 # --- Argument parsing ---
@@ -60,10 +56,23 @@ def test_ui_subcommand():
     assert args.port == 3000
 
 
-def test_build_subcommand():
-    parser = build_parser()
-    args = parser.parse_args(["build"])
-    assert args.command == "build"
+# --- Auto-build ---
+
+
+def test_ensure_built_skips_when_dist_exists():
+    """If dist/index.html exists, _ensure_built returns True without building."""
+    with patch("cogweb.cli._DIST_INDEX") as mock_index:
+        mock_index.exists.return_value = True
+        assert _ensure_built() is True
+
+
+def test_ensure_built_falls_back_when_no_app_dir():
+    """If app/ doesn't exist, _ensure_built returns True (legacy fallback)."""
+    with patch("cogweb.cli._DIST_INDEX") as mock_index, \
+         patch("cogweb.cli._APP_DIR") as mock_app:
+        mock_index.exists.return_value = False
+        mock_app.exists.return_value = False
+        assert _ensure_built() is True
 
 
 # --- PID file management ---

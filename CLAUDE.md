@@ -11,8 +11,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```
 src/coglet/     # Framework: Coglet base class + mixins
+src/cogweb/     # CogWeb: graph visualizer CLI + React Flow UI
 cogames/        # CvC player: Coach, PlayerCoglet, PolicyCoglet
-tests/          # 108 unit + integration tests (pytest + pytest-asyncio)
+tests/          # 220+ unit + integration tests (pytest + pytest-asyncio)
 docs/           # Architecture design docs
 ```
 
@@ -37,7 +38,7 @@ A Coglet is both: every COG is itself a LET under a higher COG, forming a recurs
 
 ### Mixins
 
-LifeLet (lifecycle hooks), GitLet (repo-as-policy), LogLet (log stream), TickLet (`@every` periodic), ProgLet (unified program table with pluggable executors), MulLet (fan-out N children), SuppressLet (output gating).
+LifeLet (lifecycle hooks), GitLet (repo-as-policy), LogLet (log stream), TickLet (`@every` periodic), ProgLet (unified program table with pluggable executors), MulLet (fan-out N children), SuppressLet (output gating), WebLet (CogWeb graph registration).
 
 ### Runtime Features
 
@@ -56,6 +57,11 @@ Coach (Claude Code) → PlayerCoglet (GitLet) → PolicyCoglet (ProgLet + LLM br
 ```bash
 # Run tests
 PYTHONPATH=src python -m pytest tests/ -v
+
+# Start CogWeb graph visualizer
+cogweb start              # auto-builds frontend, starts on :8787
+cogweb ui                 # open in browser (auto-starts if needed)
+cogweb stop               # stop the server
 
 # Play locally
 cogames play -m machina_1 -p class=cvc.cvc_policy.CogletPolicy -c 8 --seed 42

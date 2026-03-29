@@ -26,6 +26,13 @@ src/coglet/          # Framework
   loglet.py          # LogLet mixin — separate log stream
   mullet.py          # MulLet mixin — fan-out N children behind one handle
 
+src/cogweb/          # CogWeb graph visualizer
+  cli.py             # cogweb CLI (start/stop/restart/ui/build)
+  ui/
+    server.py        # Starlette server (REST + WebSocket)
+    app/             # React Flow frontend (Vite + TypeScript)
+    static/          # Legacy index.html + built assets (dist/)
+
 cogames/             # CvC (Cogs vs Clips) game player
   cvc/
     cvc_policy.py    # PolicyCoglet: LLM brain + Python heuristic
@@ -82,6 +89,58 @@ cogames upload -p class=cvc.cvc_policy.CogletPolicy -n coglet-v0 \
   -f cvc -f mettagrid_sdk -f setup_policy.py \
   --setup-script setup_policy.py --season beta-cvc
 ```
+
+## CogWeb — Graph Visualizer
+
+CogWeb is a browser-based graph visualizer for live coglet supervision trees. It provides a Visio-style node editor built on [React Flow](https://reactflow.dev/) with real-time WebSocket updates.
+
+### Quick Start
+
+```bash
+cogweb start              # auto-builds frontend, starts server on :8787
+cogweb start --port 9000  # custom port
+cogweb stop               # stop the server
+cogweb restart             # rebuild + restart
+cogweb ui                 # open browser (auto-starts if needed)
+```
+
+Or use directly from Python:
+
+```python
+from coglet.weblet import CogWebRegistry
+from cogweb.ui import CogWebUI
+
+registry = CogWebRegistry()
+ui = CogWebUI(registry, host="0.0.0.0", port=8787)
+await ui.start()
+```
+
+### Features
+
+- **Visio-style nodes** — cards with typed ports: blue for `@listen`, red for `@enact`, green for `transmit`
+- **Live updates** — WebSocket pushes graph snapshots every 500ms; React diffs
+- **Inspector panel** — click a node to see mixins, handlers, channels, children, config
+- **Guide commands** — send `@enact` commands to any coglet directly from the UI
+- **Hierarchical layout** — auto-arranges supervision tree; drag to override
+- **Snap-to-grid, minimap, zoom controls, dark theme**
+
+### How It Works
+
+1. Coglets mix in `WebLet` and pass a shared `CogWebRegistry`
+2. `WebLet.on_start()` registers the coglet; `on_stop()` deregisters it
+3. `CogWebRegistry.snapshot()` builds a `CogWebSnapshot` from live state
+4. `CogWebUI` (Starlette server) serves the React Flow frontend and pushes snapshots via WebSocket
+5. The browser renders the graph, and can send `guide` commands back through the WebSocket
+
+### WebSocket Protocol
+
+| Direction | Message | Purpose |
+|---|---|---|
+| Server -> Client | `{"type": "snapshot", "data": {...}}` | Full graph state |
+| Client -> Server | `{"type": "refresh"}` | Request fresh snapshot |
+| Client -> Server | `{"type": "guide", "node_id": "...", "command": "...", "data": ...}` | Send command to coglet |
+| Client -> Server | `{"type": "set_status", "node_id": "...", "status": "error"}` | Change node status |
+| Client -> Server | `{"type": "ping"}` | Keep-alive |
 
 ## Architecture
 
