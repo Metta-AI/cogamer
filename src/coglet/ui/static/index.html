@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Coglet UI</title>
+  <link rel="stylesheet" href="https://esm.sh/@xyflow/react@12/dist/style.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; background: #0d1117; color: #c9d1d9; }
+    #root { width: 100vw; height: 100vh; }
+
+    /* React Flow overrides */
+    .react-flow { background: #0d1117 !important; }
+    .react-flow__attribution { display: none; }
+    .react-flow__edge-path { stroke-width: 2; }
+    .react-flow__minimap { background: #161b22 !important; border: 1px solid #30363d !important; border-radius: 6px; }
+    .react-flow__controls { background: #161b22 !important; border: 1px solid #30363d !important; border-radius: 6px; }
+    .react-flow__controls button { background: #161b22 !important; border-color: #30363d !important; color: #c9d1d9 !important; }
+    .react-flow__controls button:hover { background: #21262d !important; }
+    .react-flow__controls svg { fill: #c9d1d9 !important; }
+
+    /* Coglet node */
+    .coglet-node { background: #161b22; border: 1px solid #30363d; border-radius: 8px; min-width: 190px; font-family: inherit; }
+    .coglet-node.selected { border-color: #58a6ff; box-shadow: 0 0 0 1px #58a6ff; }
+    .coglet-node .expand-btn { display: inline-block; cursor: pointer; color: #484f58; font-size: 10px; margin-left: 6px; padding: 0 3px; border-radius: 3px; }
+    .coglet-node .expand-btn:hover { color: #c9d1d9; background: #21262d; }
+    .coglet-node .child-count { font-size: 9px; color: #484f58; background: #21262d; padding: 1px 5px; border-radius: 8px; margin-left: 4px; }
+
+    /* Group node (expanded parent) */
+    .react-flow__node-group { background: rgba(22,27,34,0.6); border: 1px dashed #30363d; border-radius: 12px; padding: 0; }
+    .react-flow__node-group.selected { border-color: #58a6ff; }
+    .coglet-node .node-header { padding: 8px 12px 4px; border-bottom: 1px solid #21262d; }
+    .coglet-node .class-name { font-size: 13px; font-weight: 600; color: #e6edf3; }
+    .coglet-node .node-id { font-size: 9px; color: #484f58; margin-top: 1px; }
+    .coglet-node .node-body { padding: 6px 12px 8px; }
+    .coglet-node .mixins { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 4px; }
+    .coglet-node .mixin-tag { font-size: 9px; padding: 1px 5px; border-radius: 8px; background: #1f3a5f; color: #58a6ff; cursor: default; }
+
+    /* Mixin tooltip */
+    #mixin-tooltip { display: none; position: fixed; background: #1c2128; border: 1px solid #30363d; border-radius: 8px; padding: 10px 14px; z-index: 9999; max-width: 340px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); font-size: 11px; pointer-events: none; font-family: inherit; }
+    #mixin-tooltip .tt-name { font-weight: 600; color: #58a6ff; font-size: 12px; margin-bottom: 4px; }
+    #mixin-tooltip .tt-desc { color: #c9d1d9; margin-bottom: 6px; line-height: 1.4; }
+    #mixin-tooltip .tt-methods { margin-bottom: 4px; }
+    #mixin-tooltip .tt-methods code { background: #21262d; color: #3fb950; padding: 1px 5px; border-radius: 3px; font-size: 10px; margin-right: 3px; display: inline-block; margin-bottom: 2px; }
+    #mixin-tooltip .tt-file { color: #484f58; font-size: 10px; word-break: break-all; }
+    .coglet-node .ports { display: flex; justify-content: space-between; gap: 8px; }
+    .coglet-node .port-group { display: flex; flex-direction: column; gap: 2px; }
+    .coglet-node .port { font-size: 10px; display: flex; align-items: center; gap: 4px; color: #8b949e; }
+
+    /* Handle styles — triangle |> shape */
+    .react-flow__handle { width: 10px; height: 12px; border: none; border-radius: 0; background: transparent; }
+    .react-flow__handle-left { clip-path: polygon(0 0, 0 100%, 100% 50%); background: #58a6ff; }
+    .react-flow__handle-right { clip-path: polygon(0 0, 100% 50%, 0 100%); background: #f0883e; }
+    .guide-handle { width: 12px !important; height: 10px !important; border-radius: 0 !important; border: none !important; clip-path: polygon(0 0, 100% 0, 50% 100%) !important; background: #f85149 !important; }
+
+    /* Toolbar */
+    .toolbar { position: absolute; top: 8px; left: 8px; z-index: 20; display: flex; gap: 8px; align-items: center; }
+    .toolbar h1 { font-size: 14px; font-weight: 600; color: #58a6ff; }
+    .toolbar .status { font-size: 11px; color: #8b949e; }
+    .toolbar .status.ok { color: #3fb950; }
+    .btn { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 4px 12px; border-radius: 6px; font-size: 11px; cursor: pointer; font-family: inherit; }
+    .btn:hover { background: #30363d; }
+    .btn.active { background: #1f3a5f; border-color: #58a6ff; color: #58a6ff; }
+    .time-selector { display: flex; gap: 2px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 2px; }
+    .time-selector .btn { padding: 2px 8px; font-size: 10px; border: none; border-radius: 4px; }
+
+    /* Filter control */
+    .filter-control { display: flex; align-items: center; gap: 4px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 2px 4px; }
+    .filter-control select { background: #0d1117; border: none; color: #c9d1d9; font-size: 10px; font-family: inherit; padding: 2px 4px; outline: none; cursor: pointer; max-width: 120px; }
+    .filter-control select option { background: #161b22; }
+    .filter-control .filter-label { font-size: 9px; color: #484f58; text-transform: uppercase; letter-spacing: 0.5px; padding: 0 4px; white-space: nowrap; }
+    .filter-control .filter-mode { display: flex; gap: 1px; }
+    .filter-control .filter-mode .btn { padding: 1px 6px; font-size: 9px; border: none; border-radius: 3px; }
+
+    /* Create menu */
+    .create-wrapper { position: relative; }
+    .create-menu { display: none; position: absolute; top: 28px; left: 0; background: #161b22; border: 1px solid #30363d; border-radius: 6px; min-width: 180px; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.4); max-height: 300px; overflow-y: auto; }
+    .create-menu.open { display: block; }
+    .create-menu .item { padding: 8px 12px; font-size: 12px; cursor: pointer; color: #c9d1d9; font-family: inherit; }
+    .create-menu .item:hover { background: #21262d; }
+
+    /* Channel panel */
+    .channel-panel { position: absolute; bottom: 0; left: 0; right: 0; background: #161b22; border-top: 1px solid #30363d; display: flex; flex-direction: column; z-index: 60; }
+    .channel-panel .panel-header { display: flex; align-items: center; padding: 6px 12px; gap: 8px; border-bottom: 1px solid #21262d; flex-shrink: 0; }
+    .channel-panel .panel-header h3 { font-size: 12px; color: #58a6ff; font-weight: 600; }
+    .channel-panel .ch-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: #1a3a2a; color: #3fb950; }
+    .channel-panel .close-btn { margin-left: auto; cursor: pointer; color: #8b949e; font-size: 16px; padding: 2px 6px; border-radius: 4px; }
+    .channel-panel .close-btn:hover { background: #21262d; color: #c9d1d9; }
+    .channel-panel .auto-badge { font-size: 9px; padding: 1px 6px; border-radius: 8px; background: #1a3a2a; color: #3fb950; }
+    .channel-panel .msg-table { flex: 1; overflow-y: auto; font-size: 11px; }
+    .channel-panel table { width: 100%; border-collapse: collapse; }
+    .channel-panel th { position: sticky; top: 0; background: #161b22; border-bottom: 1px solid #30363d; padding: 4px 12px; text-align: left; color: #8b949e; font-size: 10px; font-weight: 600; cursor: pointer; user-select: none; text-transform: uppercase; letter-spacing: 0.5px; }
+    .channel-panel th:hover { color: #c9d1d9; }
+    .channel-panel th .sort-arrow { margin-left: 3px; font-size: 8px; }
+    .channel-panel td { padding: 3px 12px; border-bottom: 1px solid #0d1117; color: #c9d1d9; vertical-align: top; }
+    .channel-panel tr:hover td { background: #1c2128; }
+    .channel-panel .col-idx { width: 40px; color: #484f58; text-align: right; }
+    .channel-panel .col-time { width: 90px; color: #8b949e; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .channel-panel .col-data { word-break: break-all; font-family: 'JetBrains Mono', monospace; }
+    .channel-panel .msg-empty { padding: 16px; color: #484f58; text-align: center; }
+    .channel-panel .send-bar { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-top: 1px solid #21262d; flex-shrink: 0; }
+    .channel-panel .send-bar input { flex: 1; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-family: inherit; outline: none; }
+    .channel-panel .send-bar input:focus { border-color: #58a6ff; }
+    .channel-panel .send-bar .send-btn { padding: 4px 10px; border-radius: 4px; font-size: 10px; cursor: pointer; font-family: inherit; border: 1px solid; }
+    .channel-panel .send-bar .send-btn.transmit { background: #0d2d4a; border-color: #58a6ff; color: #58a6ff; }
+    .channel-panel .send-bar .send-btn.transmit:hover { background: #1f3a5f; }
+    .channel-panel .send-bar .send-btn.enact { background: #3d1f1f; border-color: #f85149; color: #f85149; }
+    .channel-panel .send-bar .send-btn.enact:hover { background: #5a2020; }
+
+    /* Program detail in channel panel */
+    .channel-panel .prog-detail { padding: 12px 16px; font-size: 11px; }
+    .channel-panel .prog-detail .prog-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .channel-panel .prog-detail .prog-name { font-weight: 600; color: #3fb950; font-size: 13px; }
+    .channel-panel .prog-source { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 8px 12px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #c9d1d9; white-space: pre-wrap; overflow-x: auto; max-height: 300px; overflow-y: auto; line-height: 1.5; }
+    .channel-panel .prog-label { font-size: 10px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; margin: 8px 0 4px; }
+
+    /* Tree panel */
+    /* Resize handles */
+    .resize-handle-right { position: absolute; top: 0; right: -3px; bottom: 0; width: 6px; cursor: col-resize; z-index: 11; }
+    .resize-handle-right:hover, .resize-handle-right.active { background: #58a6ff; opacity: 0.3; }
+    .resize-handle-left { position: absolute; top: 0; left: -3px; bottom: 0; width: 6px; cursor: col-resize; z-index: 11; }
+    .resize-handle-left:hover, .resize-handle-left.active { background: #58a6ff; opacity: 0.3; }
+    .resize-handle-top { position: absolute; top: -3px; left: 0; right: 0; height: 6px; cursor: row-resize; z-index: 11; }
+    .resize-handle-top:hover, .resize-handle-top.active { background: #58a6ff; opacity: 0.3; }
+
+    .tree-panel { position: absolute; top: 40px; left: 0; bottom: 0; width: 220px; background: #161b22; border-right: 1px solid #30363d; z-index: 10; display: flex; flex-direction: column; overflow: hidden; }
+    .tree-panel.collapsed { width: 32px; }
+    .tree-panel .tree-header { display: flex; align-items: center; padding: 8px 10px; border-bottom: 1px solid #21262d; flex-shrink: 0; gap: 6px; }
+    .tree-panel .tree-header h2 { font-size: 11px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+    .tree-panel.collapsed .tree-header h2 { display: none; }
+    .tree-panel .toggle-btn { cursor: pointer; color: #8b949e; font-size: 14px; flex-shrink: 0; padding: 0 2px; }
+    .tree-panel .toggle-btn:hover { color: #c9d1d9; }
+    .tree-panel .tree-body { flex: 1; overflow-y: auto; padding: 4px 0; }
+    .tree-panel.collapsed .tree-body { display: none; }
+    .tree-item { display: flex; align-items: center; padding: 3px 8px; cursor: pointer; font-size: 11px; color: #c9d1d9; white-space: nowrap; gap: 4px; border-radius: 4px; margin: 0 4px; }
+    .tree-item:hover { background: #21262d; }
+    .tree-item.selected { background: #1f3a5f; color: #58a6ff; }
+    .tree-item .tree-icon { color: #484f58; font-size: 10px; width: 12px; text-align: center; flex-shrink: 0; }
+    .tree-item .tree-class { color: #e6edf3; font-weight: 500; }
+    .tree-item .tree-id { color: #484f58; font-size: 9px; margin-left: 4px; }
+    .tree-item .tree-status { width: 6px; height: 6px; border-radius: 50%; background: #3fb950; flex-shrink: 0; }
+
+    /* Inspector */
+    .inspector { position: absolute; top: 40px; right: 0; bottom: 0; width: 280px; background: #161b22; border-left: 1px solid #30363d; z-index: 10; font-size: 12px; display: flex; flex-direction: column; overflow: hidden; transition: width 0.15s; }
+    .inspector.collapsed { width: 32px; }
+    .inspector .insp-header { display: flex; align-items: center; padding: 8px 10px; border-bottom: 1px solid #21262d; flex-shrink: 0; gap: 6px; }
+    .inspector .insp-header h2 { font-size: 11px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; margin: 0; padding: 0; }
+    .inspector.collapsed .insp-header h2 { display: none; }
+    .inspector.collapsed .insp-body { display: none; }
+    .inspector .insp-body { flex: 1; overflow-y: auto; }
+    .inspector .toggle-btn { cursor: pointer; color: #8b949e; font-size: 14px; flex-shrink: 0; padding: 0 2px; }
+    .inspector .toggle-btn:hover { color: #c9d1d9; }
+
+    /* Delete button */
+    .delete-btn { background: #3d1f1f; border: 1px solid #f85149; color: #f85149; padding: 3px 10px; border-radius: 4px; font-size: 10px; cursor: pointer; font-family: inherit; }
+    .delete-btn:hover { background: #5a2020; }
+
+    /* Tree item delete */
+    .tree-item .tree-delete { display: none; color: #f85149; font-size: 12px; margin-left: auto; padding: 0 4px; cursor: pointer; }
+    .tree-item:hover .tree-delete { display: block; }
+    .inspector .section { border-bottom: 1px solid #1c2128; }
+    .inspector .section-header { display: flex; align-items: center; padding: 6px 14px; cursor: pointer; user-select: none; }
+    .inspector .section-header:hover { background: #1c2128; }
+    .inspector .section-header h3 { font-size: 10px; color: #8b949e; margin-bottom: 0; text-transform: uppercase; letter-spacing: 0.5px; flex: 1; }
+    .inspector .section-header .caret { color: #484f58; font-size: 10px; }
+    .inspector .section-body { padding: 2px 14px 6px; }
+    .inspector .section-body.hidden { display: none; }
+    .inspector .field { padding: 2px 0; }
+    .inspector .label { color: #8b949e; }
+    .inspector .value { color: #c9d1d9; }
+    .inspector .badge { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 10px; margin: 1px 2px; }
+    .inspector .badge.mixin { background: #1f3a5f; color: #58a6ff; }
+    .inspector .badge.channel { background: #1a3a2a; color: #3fb950; }
+    .inspector .badge.command { background: #3d1f1f; color: #f85149; }
+    .inspector .ch-link { cursor: pointer; padding: 3px 6px; border-radius: 4px; }
+    .inspector .ch-link:hover { background: #21262d; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18",
+      "react/": "https://esm.sh/react@18/",
+      "react-dom": "https://esm.sh/react-dom@18",
+      "react-dom/": "https://esm.sh/react-dom@18/",
+      "@xyflow/react": "https://esm.sh/@xyflow/react@12?external=react,react-dom"
+    }
+  }
+  </script>
+</head>
+<body>
+<div id="root"></div>
+<div id="mixin-tooltip"></div>
+<script type="module">
+import React, { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
+import { createRoot } from 'react-dom/client';
+import {
+  ReactFlow, ReactFlowProvider, useNodesState, useEdgesState, addEdge, reconnectEdge,
+  Handle, Position, Controls, MiniMap, Background, useReactFlow,
+} from '@xyflow/react';
+
+const BASE = location.pathname.replace(/\/ui$/, '');
+
+// ---- Resize hook ----
+
+function useResize(direction, initialSize, minSize = 100, maxSize = 600) {
+  const [size, setSize] = useState(initialSize);
+  const dragging = useRef(false);
+  const startPos = useRef(0);
+  const startSize = useRef(0);
+
+  const onMouseDown = useCallback((e) => {
+    e.preventDefault();
+    dragging.current = true;
+    startPos.current = direction === 'horizontal' ? e.clientX : e.clientY;
+    startSize.current = size;
+    document.body.style.cursor = direction === 'horizontal' ? 'col-resize' : 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMouseMove = (e) => {
+      if (!dragging.current) return;
+      const delta = direction === 'horizontal'
+        ? startPos.current - e.clientX
+        : startPos.current - e.clientY;
+      setSize(Math.min(maxSize, Math.max(minSize, startSize.current + delta)));
+    };
+    const onMouseUp = () => {
+      dragging.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [size, direction, minSize, maxSize]);
+
+  return [size, onMouseDown];
+}
+
+function useResizeInverse(direction, initialSize, minSize = 100, maxSize = 600) {
+  const [size, setSize] = useState(initialSize);
+  const dragging = useRef(false);
+  const startPos = useRef(0);
+  const startSize = useRef(0);
+
+  const onMouseDown = useCallback((e) => {
+    e.preventDefault();
+    dragging.current = true;
+    startPos.current = direction === 'horizontal' ? e.clientX : e.clientY;
+    startSize.current = size;
+    document.body.style.cursor = direction === 'horizontal' ? 'col-resize' : 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMouseMove = (e) => {
+      if (!dragging.current) return;
+      const delta = direction === 'horizontal'
+        ? startPos.current - e.clientX
+        : e.clientY - startPos.current;
+      setSize(Math.min(maxSize, Math.max(minSize, startSize.current + delta)));
+    };
+    const onMouseUp = () => {
+      dragging.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [size, direction, minSize, maxSize]);
+
+  return [size, onMouseDown];
+}
+
+// ---- API helpers ----
+
+async function api(method, path, params) {
+  let url = `${BASE}${path}`;
+  if (params) url += '?' + new URLSearchParams(params);
+  const r = await fetch(url, { method });
+  return r.json();
+}
+
+// ---- Custom Coglet Node ----
+
+const CogletNode = memo(({ data, selected }) => {
+  const node = data;
+  const inputHandles = (node.listen_channels || []);
+  const outputHandles = Object.keys(node.channels || {});
+  const childCount = (node.children || []).length;
+  const isExpanded = node._expanded;
+
+  const hasEnact = (node.enact_commands || []).length > 0;
+  const hasChildren = (node.children || []).length > 0;
+
+  return React.createElement('div', { className: `coglet-node${selected ? ' selected' : ''}` },
+    // Guide target handle (top-center red circle)
+    hasEnact && React.createElement(Handle, {
+      type: 'target', position: Position.Top, id: 'guide',
+      className: 'guide-handle',
+    }),
+    // Guide source handle (bottom-center, for parents that guide children)
+    hasChildren && React.createElement(Handle, {
+      type: 'source', position: Position.Bottom, id: 'guide-out',
+      className: 'guide-handle',
+    }),
+    // Header
+    React.createElement('div', { className: 'node-header' },
+      node.label && React.createElement('div', {
+        style: { fontSize: 10, color: '#3fb950', fontWeight: 600, marginBottom: 1 },
+      }, node.label),
+      React.createElement('div', { className: 'class-name' },
+        node.class_name,
+        childCount > 0 && React.createElement('span', {
+          className: 'expand-btn nodrag',
+          onClick: (e) => { e.stopPropagation(); node._onToggle && node._onToggle(node.node_id); },
+        }, isExpanded ? '\u25BE' : '\u25B8'),
+        childCount > 0 && !isExpanded && React.createElement('span', { className: 'child-count' }, childCount),
+      ),
+      React.createElement('div', { className: 'node-id' }, node.node_id),
+    ),
+    // Body
+    React.createElement('div', { className: 'node-body' },
+      // Mixins
+      React.createElement('div', { className: 'mixins' },
+        ...(node.mixins || []).map(m =>
+          React.createElement('span', {
+            key: m, className: 'mixin-tag',
+            onMouseEnter: (e) => showMixinTooltip(e, node, m),
+            onMouseLeave: hideMixinTooltip,
+          }, m)
+        ),
+      ),
+      // Divider
+      React.createElement('div', { style: { borderTop: '1px solid #21262d', margin: '4px 0' } }),
+      // Ports
+      React.createElement('div', { className: 'ports' },
+        React.createElement('div', { className: 'port-group' },
+          ...inputHandles.map(ch =>
+            React.createElement('div', { key: ch, className: 'port', style: { color: '#58a6ff' } },
+              React.createElement(Handle, {
+                type: 'target', position: Position.Left, id: `in-${ch}`,
+                style: { position: 'relative', top: 'auto', left: 'auto', transform: 'none', background: '#58a6ff' },
+              }),
+              ch,
+            )
+          ),
+        ),
+        React.createElement('div', { className: 'port-group', style: { alignItems: 'flex-end' } },
+          ...outputHandles.map(ch =>
+            React.createElement('div', { key: ch, className: 'port', style: { color: '#f0883e' } },
+              ch,
+              React.createElement(Handle, {
+                type: 'source', position: Position.Right, id: `out-${ch}`,
+                style: { position: 'relative', top: 'auto', right: 'auto', transform: 'none', background: '#f0883e' },
+              }),
+            )
+          ),
+        ),
+      ),
+    ),
+  );
+});
+
+function showMixinTooltip(e, node, mixinName) {
+  const tip = document.getElementById('mixin-tooltip');
+  const info = (node.mixin_info || {})[mixinName];
+  if (!info) return;
+  const methods = (info.methods || []).map(m => `<code>${m}()</code>`).join(' ');
+  const file = (info.file || '').replace(/^.*\/src\//, 'src/');
+  tip.innerHTML = `
+    <div class="tt-name">${mixinName}</div>
+    <div class="tt-desc">${info.description || 'No description'}</div>
+    ${methods ? `<div class="tt-methods">${methods}</div>` : ''}
+    ${file ? `<div class="tt-file">${file}</div>` : ''}
+  `;
+  const rect = e.target.getBoundingClientRect();
+  tip.style.left = rect.left + 'px';
+  tip.style.top = (rect.bottom + 6) + 'px';
+  tip.style.display = 'block';
+}
+
+function hideMixinTooltip() {
+  document.getElementById('mixin-tooltip').style.display = 'none';
+}
+
+const nodeTypes = { coglet: CogletNode };
+
+// ---- Inspector Panel ----
+
+function Inspector({ selected, graphData, onOpenChannel, onOpenProgram, onDelete, width, onResize }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const h = React.createElement;
+
+  const header = h('div', { className: 'insp-header' },
+    h('span', { className: 'toggle-btn', onClick: () => setCollapsed(c => !c) }, collapsed ? '\u25C0' : '\u25B6'),
+    h('h2', null, 'Inspector'),
+  );
+
+  const inspStyle = collapsed ? {} : { width };
+  const handle = !collapsed && h('div', { className: 'resize-handle-left', onMouseDown: onResize });
+
+  if (collapsed) {
+    return h('div', { className: 'inspector collapsed' }, header);
+  }
+
+  if (!selected) {
+    return h('div', { className: 'inspector', style: inspStyle }, handle, header,
+      h('div', { className: 'insp-body' },
+        h('div', { className: 'section' },
+          h('div', { className: 'section-body' },
+            h('p', { className: 'field', style: { color: '#484f58', fontSize: '11px' } }, 'Select a node or edge'),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---- Edge selected ----
+  if (selected.type === 'edge') {
+    const d = selected.data || {};
+    const srcNode = (graphData.nodes || {})[d.srcId];
+    const destNode = (graphData.nodes || {})[d.destId];
+    return h('div', { className: 'inspector', style: inspStyle }, handle, header,
+      h('div', { className: 'insp-body' },
+        h(Section, { title: 'Connection' },
+          field('Source', `${srcNode ? srcNode.class_name : d.srcId}`),
+          field('Channel', d.srcCh || d.commands || ''),
+          h('div', { style: { textAlign: 'center', color: '#58a6ff', padding: '4px 0', fontSize: 14 } }, '\u2193'),
+          field('Target', `${destNode ? destNode.class_name : d.destId}`),
+          field('Channel', d.destCh || ''),
+        ),
+        d.srcCh && h(Section, { title: 'Messages' },
+          h('div', { className: 'field ch-link', onClick: () => onOpenChannel(d.srcId, d.srcCh) },
+            h('span', { className: 'label', style: { color: '#f0883e' } }, `${d.srcId}:${d.srcCh} \u25B6`),
+          ),
+          h('div', { className: 'field ch-link', onClick: () => onOpenChannel(d.destId, d.destCh) },
+            h('span', { className: 'label', style: { color: '#58a6ff' } }, `\u25B6 ${d.destId}:${d.destCh}`),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---- Node selected ----
+  const node = selected.data;
+  if (!node) return null;
+
+  const allCh = [...new Set([...Object.keys(node.channels || {}), ...(node.listen_channels || [])])].sort();
+  return h('div', { className: 'inspector', style: inspStyle }, handle, header,
+    h('div', { className: 'insp-body' },
+      h(Section, { title: 'Identity' },
+        field('Class', node.class_name),
+        h('div', { key: 'id-row', className: 'field', style: { display: 'flex', alignItems: 'center', gap: 6 } },
+          h('span', { className: 'label' }, 'ID: '),
+          h('span', { className: 'value' }, node.node_id),
+          h('button', { className: 'delete-btn', onClick: () => onDelete(node.node_id), style: { marginLeft: 'auto', padding: '1px 6px', fontSize: 9 } }, 'stop'),
+        ),
+        field('Status', node.status),
+        node.parent_id && field('Parent', node.parent_id),
+      ),
+      // Per-mixin sections
+      ...(node.mixins || []).map(m => {
+        const ms = (node.mixin_state || {})[m] || {};
+        return h(Section, { key: m, title: m, defaultOpen: m === 'ProgLet' },
+          renderMixinState(h, m, ms, node, onOpenProgram),
+        );
+      }),
+      h(Section, { title: 'Channels' },
+        ...allCh.map(ch => {
+          const isIn = (node.listen_channels || []).includes(ch);
+          const subs = (node.channels || {})[ch];
+          const label = isIn ? `\u25B6 ${ch}` : `${ch} \u25B6`;
+          const color = isIn ? '#58a6ff' : '#f0883e';
+          return h('div', {
+            key: ch, className: 'field ch-link',
+            onClick: () => onOpenChannel(node.node_id, ch),
+          },
+            h('span', { className: 'label', style: { color } }, label),
+            subs !== undefined && h('span', { className: 'value', style: { color: '#484f58', marginLeft: 6 } }, `(${subs} subs)`),
+          );
+        }),
+        ...(node.enact_commands || []).map(cmd =>
+          h('div', {
+            key: `enact-${cmd}`, className: 'field ch-link',
+            onClick: () => onOpenChannel(node.node_id, cmd),
+          },
+            h('span', { className: 'label', style: { color: '#f85149' } }, `\u25CF ${cmd}`),
+          ),
+        ),
+        allCh.length === 0 && (node.enact_commands || []).length === 0 &&
+          h('span', { style: { color: '#484f58', fontSize: '11px' } }, 'none'),
+      ),
+      h(Section, { title: 'Config', defaultOpen: false },
+        ...Object.entries(node.config || {}).map(([k, v]) => field(k, String(v))),
+      ),
+    ),
+  );
+}
+
+function field(label, value) {
+  return React.createElement('div', { key: label, className: 'field' },
+    React.createElement('span', { className: 'label' }, label + ': '),
+    React.createElement('span', { className: 'value' }, value),
+  );
+}
+
+function renderMixinState(h, mixinName, state, node, onOpenProgram) {
+  const info = (node.mixin_info || {})[mixinName] || {};
+  const desc = info.description || '';
+
+  switch (mixinName) {
+    case 'ProgLet': {
+      const progs = state.programs || {};
+      const entries = Object.entries(progs);
+      if (entries.length === 0) return h('span', { style: { color: '#484f58', fontSize: 11 } }, 'No programs');
+      return h(React.Fragment, null,
+        ...entries.map(([name, p]) =>
+          h('div', { key: name, className: 'field ch-link',
+            style: { display: 'flex', flexDirection: 'column', gap: 1, padding: '4px 6px', cursor: 'pointer' },
+            onClick: () => onOpenProgram && onOpenProgram(node.node_id, name, p),
+          },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+              h('span', { style: { color: '#3fb950', fontWeight: 500 } }, name),
+              h('span', { className: 'badge', style: { background: p.executor === 'llm' ? '#3d1f5f' : '#1a3a2a', color: p.executor === 'llm' ? '#bc8cff' : '#3fb950' } }, p.executor),
+            ),
+            h('div', { style: { fontSize: 10, color: '#484f58', paddingLeft: 2 } },
+              p.has_fn && h('span', { style: { marginRight: 6 } }, '\u25B8 fn'),
+              p.has_system && h('span', { style: { marginRight: 6 } }, '\u25B8 system'),
+              p.tools.length > 0 && h('span', null, `\u25B8 ${p.tools.length} tools`),
+            ),
+          )
+        ),
+      );
+    }
+    case 'TickLet': {
+      const tickers = state.tickers || [];
+      if (tickers.length === 0) return h('span', { style: { color: '#484f58', fontSize: 11 } }, 'No tickers');
+      return h(React.Fragment, null,
+        ...tickers.map(t =>
+          h('div', { key: t.method, className: 'field' },
+            h('span', { className: 'label' }, t.method),
+            h('span', { className: 'value', style: { marginLeft: 6, color: '#8b949e' } }, `every ${t.interval}${t.unit}`),
+          )
+        ),
+      );
+    }
+    case 'SuppressLet': {
+      const chs = state.suppressed_channels || [];
+      const cmds = state.suppressed_commands || [];
+      if (chs.length === 0 && cmds.length === 0) return h('span', { style: { color: '#3fb950', fontSize: 11 } }, 'Nothing suppressed');
+      return h(React.Fragment, null,
+        chs.length > 0 && h('div', { className: 'field' },
+          h('span', { className: 'label' }, 'Channels: '),
+          h('span', { className: 'value', style: { color: '#f85149' } }, chs.join(', ')),
+        ),
+        cmds.length > 0 && h('div', { className: 'field' },
+          h('span', { className: 'label' }, 'Commands: '),
+          h('span', { className: 'value', style: { color: '#f85149' } }, cmds.join(', ')),
+        ),
+      );
+    }
+    case 'LogLet': {
+      return field('Level', state.level || 'info');
+    }
+    case 'MulLet': {
+      return field('Fan-out', `${state.children_count || 0} children`);
+    }
+    case 'GitLet': {
+      return field('Repo', state.repo || '(none)');
+    }
+    default: {
+      // Generic: show description
+      return h('span', { style: { color: '#8b949e', fontSize: 11 } }, desc || mixinName);
+    }
+  }
+}
+
+function Section({ title, children, defaultOpen = true }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const h = React.createElement;
+  return h('div', { className: 'section' },
+    h('div', { className: 'section-header', onClick: () => setOpen(o => !o) },
+      h('h3', null, title),
+      h('span', { className: 'caret' }, open ? '\u25BE' : '\u25B8'),
+    ),
+    h('div', { className: `section-body${open ? '' : ' hidden'}` }, children),
+  );
+}
+
+// ---- Tree Panel ----
+
+function TreePanel({ graphData, selectedId, onSelect, onFocus, onDelete, expanded, onToggleExpand, onSetFocus, width, onResize }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const h = React.createElement;
+
+  const nodes = graphData.nodes || {};
+  const childrenOf = {};
+  const hasParent = new Set();
+  for (const [nid, n] of Object.entries(nodes)) {
+    childrenOf[nid] = (n.children || []).filter(cid => nodes[cid]);
+    for (const cid of childrenOf[nid]) hasParent.add(cid);
+  }
+  const roots = Object.keys(nodes).filter(nid => !hasParent.has(nid));
+
+  function renderNode(nid, depth) {
+    const n = nodes[nid];
+    if (!n) return null;
+    const children = childrenOf[nid] || [];
+    const hasChildren = children.length > 0;
+    const isExpanded = expanded[nid] !== false; // default expanded
+    const isSelected = selectedId === nid;
+    const indent = depth * 16;
+
+    return h(React.Fragment, { key: nid },
+      h('div', {
+        className: `tree-item${isSelected ? ' selected' : ''}`,
+        style: { paddingLeft: 8 + indent },
+        onClick: () => onSelect(nid),
+        onDoubleClick: () => { onSetFocus && onSetFocus(nid); onFocus && onFocus(nid); },
+      },
+        h('span', {
+          className: 'tree-icon',
+          onClick: hasChildren ? (e) => { e.stopPropagation(); onToggleExpand(nid); } : undefined,
+          style: hasChildren ? { cursor: 'pointer' } : {},
+        }, hasChildren ? (isExpanded ? '\u25BE' : '\u25B8') : '\u2022'),
+        h('span', { className: 'tree-class' }, n.label || n.class_name),
+        n.label && h('span', { style: { color: '#8b949e', fontSize: 9, marginLeft: 3 } }, `[${n.class_name}]`),
+        h('span', { className: 'tree-id' }, nid.split('-').pop()),
+        h('span', { className: 'tree-status', style: { background: n.status === 'running' ? '#3fb950' : n.status === 'error' ? '#f85149' : '#8b949e' } }),
+        h('span', { className: 'tree-delete', onClick: (e) => { e.stopPropagation(); onDelete(nid); } }, '\u00D7'),
+      ),
+      hasChildren && isExpanded && children.map(cid => renderNode(cid, depth + 1)),
+    );
+  }
+
+  return h('div', { className: `tree-panel${collapsed ? ' collapsed' : ''}`, style: collapsed ? {} : { width } },
+    h('div', { className: 'tree-header' },
+      h('span', { className: 'toggle-btn', onClick: () => setCollapsed(c => !c) }, collapsed ? '\u25B6' : '\u25C0'),
+      h('h2', null, 'Coglets'),
+    ),
+    h('div', { className: 'tree-body' },
+      roots.length === 0 && h('div', { style: { padding: '8px 12px', color: '#484f58', fontSize: 11 } }, 'No coglets running'),
+      ...roots.map(nid => renderNode(nid, 0)),
+    ),
+    !collapsed && h('div', { className: 'resize-handle-right', onMouseDown: onResize }),
+  );
+}
+
+// ---- Channel Panel ----
+
+function ChannelPanel({ nodeId, channel, nodeName, nodeData, onClose, height, onResize }) {
+  const [messages, setMessages] = useState(null);
+  const [sortCol, setSortCol] = useState('idx');  // 'idx' | 'time' | 'data'
+  const [sortAsc, setSortAsc] = useState(false);  // newest first by default
+  const [sendValue, setSendValue] = useState('');
+  const scrollRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const isListenCh = (nodeData?.listen_channels || []).includes(channel);
+  const isEnactCh = (nodeData?.enact_commands || []).includes(channel);
+  const isOutputCh = !isListenCh && !isEnactCh;
+
+  const refresh = useCallback(() => {
+    if (!nodeId || !channel) return;
+    api('GET', `/history/${nodeId}/${channel}`, { n: 50 })
+      .then(d => setMessages(d.messages || []))
+      .catch(() => setMessages([]));
+  }, [nodeId, channel]);
+
+  // Initial fetch + auto-poll every 1s
+  useEffect(() => {
+    refresh();
+    const timer = setInterval(refresh, 1000);
+    return () => clearInterval(timer);
+  }, [refresh]);
+
+  const toggleSort = useCallback((col) => {
+    setSortCol(prev => {
+      if (prev === col) { setSortAsc(a => !a); return col; }
+      setSortAsc(col === 'data');  // data asc by default, others desc
+      return col;
+    });
+  }, []);
+
+  const fmtTime = (ts) => {
+    if (!ts) return '';
+    const d = new Date(ts * 1000);
+    return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      + '.' + String(d.getMilliseconds()).padStart(3, '0');
+  };
+
+  const sorted = useMemo(() => {
+    if (!messages) return [];
+    const indexed = messages.map((m, i) => ({ ...m, idx: i }));
+    const cmp = (a, b) => {
+      let va, vb;
+      if (sortCol === 'idx') { va = a.idx; vb = b.idx; }
+      else if (sortCol === 'time') { va = a.ts || 0; vb = b.ts || 0; }
+      else { va = JSON.stringify(a.data); vb = JSON.stringify(b.data); }
+      if (va < vb) return sortAsc ? -1 : 1;
+      if (va > vb) return sortAsc ? 1 : -1;
+      return 0;
+    };
+    return [...indexed].sort(cmp);
+  }, [messages, sortCol, sortAsc]);
+
+  const arrow = (col) => sortCol === col ? (sortAsc ? '\u25B2' : '\u25BC') : '';
+
+  const h = React.createElement;
+  return h('div', { className: 'channel-panel', style: { height } },
+    h('div', { className: 'resize-handle-top', onMouseDown: onResize }),
+    h('div', { className: 'panel-header' },
+      h('h3', null, nodeName || nodeId),
+      h('span', { className: 'ch-badge' }, channel),
+      h('span', { className: 'auto-badge' }, `${sorted.length} msgs \u2022 live`),
+      h('span', { className: 'close-btn', onClick: onClose }, '\u00D7'),
+    ),
+    h('div', { className: 'msg-table', ref: scrollRef },
+      messages === null
+        ? h('div', { className: 'msg-empty' }, 'Loading...')
+        : messages.length === 0
+          ? h('div', { className: 'msg-empty' }, 'No messages yet')
+          : h('table', null,
+              h('thead', null,
+                h('tr', null,
+                  h('th', { className: 'col-idx', onClick: () => toggleSort('idx') }, `# ${arrow('idx')}`),
+                  h('th', { className: 'col-time', onClick: () => toggleSort('time') }, `Time ${arrow('time')}`),
+                  h('th', { className: 'col-data', onClick: () => toggleSort('data') }, `Data ${arrow('data')}`),
+                ),
+              ),
+              h('tbody', null,
+                ...sorted.map(m =>
+                  h('tr', { key: m.idx },
+                    h('td', { className: 'col-idx' }, m.idx + 1),
+                    h('td', { className: 'col-time' }, fmtTime(m.ts)),
+                    h('td', { className: 'col-data' }, typeof m.data === 'string' ? m.data : JSON.stringify(m.data)),
+                  )
+                ),
+              ),
+            ),
+    ),
+    // Send bar (for input/enact channels)
+    (isListenCh || isEnactCh) && h('div', { className: 'send-bar' },
+      h('input', {
+        ref: inputRef,
+        className: 'nodrag',
+        placeholder: isEnactCh ? 'Command data (JSON or text)...' : 'Data (JSON or text)...',
+        value: sendValue,
+        onChange: (e) => setSendValue(e.target.value),
+        onKeyDown: (e) => {
+          if (e.key === 'Enter' && sendValue.trim()) {
+            if (isListenCh) doTransmit();
+            else doEnact();
+          }
+        },
+      }),
+      isListenCh && h('button', { className: 'send-btn transmit', onClick: doTransmit }, 'Transmit'),
+      isEnactCh && h('button', { className: 'send-btn enact', onClick: doEnact }, 'Enact'),
+    ),
+  );
+
+  function parseValue(raw) {
+    try { return JSON.parse(raw); } catch { return raw; }
+  }
+
+  function doTransmit() {
+    if (!sendValue.trim()) return;
+    const val = parseValue(sendValue);
+    const params = { data: typeof val === 'string' ? val : JSON.stringify(val) };
+    api('POST', `/transmit/${nodeId}/${channel}`, params).then(() => {
+      setSendValue('');
+      refresh();
+      inputRef.current?.focus();
+    });
+  }
+
+  function doEnact() {
+    if (!sendValue.trim()) return;
+    const val = parseValue(sendValue);
+    const params = { command: channel };
+    if (val !== '') params.data = typeof val === 'string' ? val : JSON.stringify(val);
+    api('POST', `/enact/${nodeId}`, params).then(() => {
+      setSendValue('');
+      refresh();
+      inputRef.current?.focus();
+    });
+  }
+}
+
+// ---- Program Panel ----
+
+function ProgramPanel({ nodeId, progName, progData, nodeName, onClose, height, onResize }) {
+  const h = React.createElement;
+  const p = progData || {};
+
+  return h('div', { className: 'channel-panel', style: { height } },
+    h('div', { className: 'resize-handle-top', onMouseDown: onResize }),
+    h('div', { className: 'panel-header' },
+      h('h3', null, nodeName || nodeId),
+      h('span', { className: 'ch-badge', style: { background: p.executor === 'llm' ? '#3d1f5f' : '#1a3a2a', color: p.executor === 'llm' ? '#bc8cff' : '#3fb950' } }, `${progName} [${p.executor}]`),
+      h('span', { className: 'close-btn', onClick: onClose }, '\u00D7'),
+    ),
+    h('div', { className: 'prog-detail', style: { flex: 1, overflowY: 'auto' } },
+      p.has_fn && p.fn_source && h(React.Fragment, null,
+        h('div', { className: 'prog-label' }, 'Function'),
+        h('pre', { className: 'prog-source' }, p.fn_source),
+      ),
+      p.has_system && p.system_text && h(React.Fragment, null,
+        h('div', { className: 'prog-label' }, 'System Prompt'),
+        h('pre', { className: 'prog-source' }, p.system_text),
+      ),
+      p.tools && p.tools.length > 0 && h(React.Fragment, null,
+        h('div', { className: 'prog-label' }, 'Tools'),
+        h('pre', { className: 'prog-source' }, p.tools.join('\n')),
+      ),
+      p.config && Object.keys(p.config).length > 0 && h(React.Fragment, null,
+        h('div', { className: 'prog-label' }, 'Config'),
+        h('pre', { className: 'prog-source' }, JSON.stringify(p.config, null, 2)),
+      ),
+    ),
+  );
+}
+
+// ---- Create Menu ----
+
+function CreateMenu({ onCreated }) {
+  const [open, setOpen] = useState(false);
+  const [cogs, setCogs] = useState([]);
+
+  const toggle = useCallback(() => {
+    if (!open) {
+      api('GET', '/cogs').then(d => setCogs(d.cogs || []));
+    }
+    setOpen(o => !o);
+  }, [open]);
+
+  const create = useCallback((path) => {
+    setOpen(false);
+    api('POST', '/create', { cog_dir: path }).then(d => {
+      console.log('Created', d.id);
+      if (onCreated) onCreated();
+    });
+  }, [onCreated]);
+
+  useEffect(() => {
+    const handler = (e) => { if (!e.target.closest('.create-wrapper')) setOpen(false); };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, []);
+
+  return React.createElement('div', { className: 'create-wrapper' },
+    React.createElement('button', { className: 'btn', onClick: toggle }, '+ Create'),
+    React.createElement('div', { className: `create-menu${open ? ' open' : ''}` },
+      cogs.length === 0 && React.createElement('div', { className: 'item', style: { color: '#484f58' } }, 'No .cog dirs found'),
+      ...cogs.map(c =>
+        React.createElement('div', { key: c.name, className: 'item', onClick: () => create(c.path) }, c.name)
+      ),
+    ),
+  );
+}
+
+// ---- Filter Control ----
+
+function FilterControl({ graphData, filter, onFilter }) {
+  const h = React.createElement;
+  const nodes = graphData.nodes || {};
+
+  const allNodes = Object.entries(nodes)
+    .map(([nid, n]) => ({ id: nid, label: `${n.class_name} (${nid.split('-').pop()})` }));
+
+  return h('div', { className: 'filter-control' },
+    h('span', { className: 'filter-label' }, 'Focus'),
+    h('select', {
+      value: filter.root || '',
+      onChange: (e) => onFilter({ ...filter, root: e.target.value || null }),
+    },
+      h('option', { value: '' }, 'All'),
+      ...allNodes.map(p => h('option', { key: p.id, value: p.id }, p.label)),
+    ),
+    filter.root && h('div', { className: 'filter-mode' },
+      h('button', {
+        className: `btn${filter.mode === 'descendants' ? ' active' : ''}`,
+        onClick: () => onFilter({ ...filter, mode: 'descendants' }),
+      }, 'Tree'),
+      h('button', {
+        className: `btn${filter.mode === 'children' ? ' active' : ''}`,
+        onClick: () => onFilter({ ...filter, mode: 'children' }),
+      }, 'Direct'),
+      h('button', {
+        className: `btn${filter.mode === 'siblings' ? ' active' : ''}`,
+        onClick: () => onFilter({ ...filter, mode: 'siblings' }),
+      }, 'Siblings'),
+    ),
+  );
+}
+
+// ---- Main App ----
+
+function FocusHelper({ focusRef, positionsRef }) {
+  const { setCenter, getZoom } = useReactFlow();
+  useEffect(() => {
+    focusRef.current = (nid) => {
+      const pos = positionsRef.current[nid];
+      if (pos) {
+        setCenter(pos.x + 100, pos.y + 60, { zoom: getZoom(), duration: 300 });
+      }
+    };
+  }, [focusRef, positionsRef, setCenter, getZoom]);
+  return null;
+}
+
+function App() {
+  const [graphData, setGraphData] = useState({ nodes: {}, edges: [] });
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [selected, setSelected] = useState(null);       // {type:'node', data} | {type:'edge', data}
+  const [channelView, setChannelView] = useState(null); // {nodeId, channel}
+  const [programView, setProgramView] = useState(null); // {nodeId, name, data}
+  const [connected, setConnected] = useState(false);
+  const [treeWidth, onTreeResize] = useResize('horizontal', 220, 120, 500);
+  const [inspWidth, onInspResize] = useResizeInverse('horizontal', 280, 150, 500);
+  const [bottomHeight, onBottomResize] = useResize('vertical', 250, 100, 500);
+  const [timeWindow, setTimeWindow] = useState(() => localStorage.getItem('coglet-tw') || '5s');
+  const [expandedNodes, setExpandedNodes] = useState({});  // nodeId -> bool
+  const [filter, setFilter] = useState({ root: null, mode: 'descendants' });
+  const [showEdges, setShowEdges] = useState({ data: true, guide: true });
+  const showEdgesRef = useRef({ data: true, guide: true });
+  const wsRef = useRef(null);
+  const positionsRef = useRef({}); // Remember user-dragged positions
+  const timeWindowRef = useRef(timeWindow);
+  const expandedRef = useRef(expandedNodes);
+  const filterRef = useRef(filter);
+
+  const setFilterAndRef = useCallback((f) => {
+    setFilter(f);
+    filterRef.current = f;
+  }, []);
+
+  const toggleExpand = useCallback((nid) => {
+    setExpandedNodes(prev => {
+      const next = { ...prev, [nid]: !prev[nid] };
+      expandedRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const changeTimeWindow = useCallback((tw) => {
+    setTimeWindow(tw);
+    timeWindowRef.current = tw;
+    localStorage.setItem('coglet-tw', tw);
+  }, []);
+
+  // Convert snapshot to React Flow nodes/edges
+  const updateGraph = useCallback((data) => {
+    setGraphData(data);
+    const expanded = expandedRef.current;
+
+    // Filter: which nodes pass the filter
+    const f = filterRef.current;
+    function passesFilter(nid) {
+      if (!f.root) return true;
+      if (nid === f.root) return true;
+      const rootNode = data.nodes[f.root];
+      if (f.mode === 'children') {
+        const n = data.nodes[nid];
+        return n && n.parent_id === f.root;
+      }
+      if (f.mode === 'siblings') {
+        const n = data.nodes[nid];
+        return n && rootNode && n.parent_id === rootNode.parent_id;
+      }
+      // descendants: walk up
+      let cur = nid;
+      while (cur) {
+        const n = data.nodes[cur];
+        if (!n) return false;
+        if (n.parent_id === f.root) return true;
+        cur = n.parent_id;
+      }
+      return false;
+    }
+
+    // A node is visible if it passes filter AND all ancestors are expanded
+    function isVisible(nid) {
+      if (!passesFilter(nid)) return false;
+      const n = data.nodes[nid];
+      if (!n) return false;
+      if (!n.parent_id) return true;
+      if (!passesFilter(n.parent_id)) return true; // parent filtered out, this is a new root
+      if (!expanded[n.parent_id]) return false;
+      return isVisible(n.parent_id);
+    }
+
+    const rfNodes = [];
+    const visibleIds = Object.keys(data.nodes).filter(isVisible);
+    let gridIdx = 0;
+
+    for (const nid of visibleIds) {
+      const n = data.nodes[nid];
+      const hasChildren = (n.children || []).some(cid => data.nodes[cid]);
+      const isExp = !!expanded[nid];
+      const saved = positionsRef.current[nid];
+      const col = gridIdx % 3;
+      const row = Math.floor(gridIdx / 3);
+      gridIdx++;
+
+      rfNodes.push({
+        id: nid,
+        type: 'coglet',
+        position: saved || { x: col * 260, y: row * 170 },
+        data: { ...n, _expanded: isExp, _onToggle: toggleExpand },
+      });
+    }
+
+    // Edges: only between visible nodes
+    const rfEdges = [];
+    const tw = timeWindowRef.current;
+    const visibleSet = new Set(visibleIds);
+    for (const e of (data.edges || [])) {
+      // Only show edges between visible nodes
+      if (!visibleSet.has(e.from) || !visibleSet.has(e.to)) continue;
+      const ev = showEdgesRef.current;
+      if (e.kind === 'control' && !ev.guide) continue;
+      if (e.kind !== 'control' && !ev.data) continue;
+
+      if (e.kind === 'control') {
+        rfEdges.push({
+          id: `ctrl-${e.from}-${e.to}`,
+          source: e.from,
+          sourceHandle: 'guide-out',
+          target: e.to,
+          targetHandle: 'guide',
+          type: 'smoothstep',
+          pathOptions: { offset: 20, borderRadius: 8 },
+          animated: false,
+          style: { stroke: '#f85149', strokeWidth: 1.5, strokeDasharray: '6 3' },
+          markerEnd: { type: 'arrowclosed', color: '#f85149', width: 16, height: 16 },
+          data: { srcId: e.from, destId: e.to, kind: 'control', commands: e.channel },
+        });
+      } else {
+        const srcCh = e.channel.split('->')[0];
+        const destCh = e.channel.split('->')[1];
+        const srcNode = data.nodes[e.from];
+        const stats = srcNode?.channel_stats?.[e.src_channel || srcCh] || {};
+        const count = stats[tw] || 0;
+        rfEdges.push({
+          id: `link-${e.from}-${e.to}-${e.channel}`,
+          source: e.from,
+          sourceHandle: `out-${srcCh}`,
+          target: e.to,
+          targetHandle: `in-${destCh}`,
+          type: 'smoothstep',
+          pathOptions: { offset: 30, borderRadius: 12 },
+          animated: count > 0,
+          style: { stroke: '#58a6ff', strokeWidth: 2 },
+          markerEnd: { type: 'arrowclosed', color: '#58a6ff', width: 20, height: 20 },
+          label: count > 0 ? String(count) : '',
+          labelStyle: { fill: '#3fb950', fontSize: 10, fontWeight: 600, fontFamily: 'inherit' },
+          labelBgStyle: { fill: '#161b22', fillOpacity: 0.9 },
+          labelBgPadding: [4, 6],
+          labelBgBorderRadius: 4,
+          data: { srcId: e.from, srcCh, destId: e.to, destCh, raw: e },
+        });
+      }
+    }
+
+    setNodes(rfNodes);
+    setEdges(rfEdges);
+  }, [setNodes, setEdges, toggleExpand]);
+
+  // Re-render graph when expand/filter state changes
+  useEffect(() => {
+    if (Object.keys(graphData.nodes).length > 0) {
+      updateGraph(graphData);
+    }
+  }, [expandedNodes, filter, showEdges]);
+
+  // WebSocket
+  useEffect(() => {
+    function connect() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const url = `${proto}//${location.host}${location.pathname.replace(/\/$/, '')}/ws`;
+      const ws = new WebSocket(url);
+      wsRef.current = ws;
+
+      ws.onopen = () => setConnected(true);
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'snapshot') updateGraph(msg.data);
+      };
+      ws.onclose = () => {
+        setConnected(false);
+        setTimeout(connect, 2000);
+      };
+      ws.onerror = () => ws.close();
+    }
+    connect();
+
+    // Also fetch REST initially
+    api('GET', '/ui/graph').then(updateGraph).catch(() => {});
+
+    return () => { if (wsRef.current) wsRef.current.close(); };
+  }, [updateGraph]);
+
+  const refresh = useCallback(() => {
+    if (wsRef.current?.readyState === 1) {
+      wsRef.current.send(JSON.stringify({ type: 'refresh' }));
+    }
+  }, []);
+
+  // Save positions when user drags nodes
+  const handleNodesChange = useCallback((changes) => {
+    onNodesChange(changes);
+    for (const c of changes) {
+      if (c.type === 'position' && c.position) {
+        positionsRef.current[c.id] = c.position;
+      }
+    }
+  }, [onNodesChange]);
+
+  // Handle new connection from drag-to-connect
+  const onConnect = useCallback((connection) => {
+    // connection: { source, sourceHandle, target, targetHandle }
+    const srcCh = (connection.sourceHandle || '').replace('out-', '');
+    const destCh = (connection.targetHandle || '').replace('in-', '');
+    if (!srcCh || !destCh) return;
+
+    api('POST', '/link', {
+      src_id: connection.source, src_channel: srcCh,
+      dest_id: connection.target, dest_channel: destCh,
+    }).then(() => refresh());
+  }, [refresh]);
+
+  const onReconnect = useCallback((oldEdge, newConnection) => {
+    // Remove old link, create new one
+    const oldData = oldEdge.data;
+    if (oldData?.srcCh && oldData?.destCh) {
+      api('DELETE', '/link', {
+        src_id: oldData.srcId, src_channel: oldData.srcCh,
+        dest_id: oldData.destId, dest_channel: oldData.destCh,
+      }).then(() => {
+        const srcCh = (newConnection.sourceHandle || '').replace('out-', '');
+        const destCh = (newConnection.targetHandle || '').replace('in-', '');
+        if (srcCh && destCh) {
+          api('POST', '/link', {
+            src_id: newConnection.source, src_channel: srcCh,
+            dest_id: newConnection.target, dest_channel: destCh,
+          }).then(() => refresh());
+        }
+      });
+    }
+  }, [refresh]);
+
+  // Selection
+  const onNodeClick = useCallback((_, node) => {
+    setSelected({ type: 'node', data: node.data });
+  }, []);
+
+  const onNodeDoubleClick = useCallback((_, node) => {
+    // Double-click sets this node as the focus filter and expands it
+    const hasChildren = (node.data.children || []).length > 0;
+    if (hasChildren) {
+      setFilterAndRef({ root: node.id, mode: 'descendants' });
+      if (!expandedRef.current[node.id]) toggleExpand(node.id);
+    }
+  }, [toggleExpand, setFilterAndRef]);
+
+  const onEdgeClick = useCallback((_, edge) => {
+    setSelected({ type: 'edge', data: edge.data, edge });
+    // Also open channel panel for the source channel
+    if (edge.data) {
+      setChannelView({ nodeId: edge.data.srcId, channel: edge.data.srcCh });
+    }
+  }, []);
+
+  const onPaneClick = useCallback(() => {
+    setSelected(null);
+  }, []);
+
+  const onDelete = useCallback((nodeId) => {
+    api('POST', `/stop/${nodeId}`).then(() => {
+      setSelected(null);
+      refresh();
+    }).catch(err => console.error('Delete failed:', err));
+  }, [refresh]);
+
+  const onTreeSelect = useCallback((nid) => {
+    const node = graphData.nodes[nid];
+    if (node) setSelected({ type: 'node', data: node });
+  }, [graphData]);
+
+  const focusRef = useRef(null); // will be set by FocusHelper
+  const onTreeFocus = useCallback((nid) => {
+    if (focusRef.current) focusRef.current(nid);
+  }, []);
+
+  return React.createElement('div', { style: { width: '100%', height: '100%', position: 'relative' } },
+    // Toolbar
+    React.createElement('div', { className: 'toolbar' },
+      React.createElement('h1', null, 'Coglet'),
+      React.createElement('span', { className: `status${connected ? ' ok' : ''}` }, connected ? 'connected' : 'disconnected'),
+      React.createElement(CreateMenu, { onCreated: refresh }),
+      React.createElement('div', { className: 'time-selector' },
+        ...['1s', '5s', '60s', '5m', '1h', '24h'].map(tw =>
+          React.createElement('button', {
+            key: tw,
+            className: `btn${timeWindow === tw ? ' active' : ''}`,
+            onClick: () => changeTimeWindow(tw),
+          }, tw)
+        ),
+      ),
+      React.createElement('div', { className: 'time-selector' },
+        React.createElement('button', {
+          className: `btn${showEdges.data ? ' active' : ''}`,
+          style: showEdges.data ? { borderColor: '#58a6ff', color: '#58a6ff' } : {},
+          onClick: () => { const n = { ...showEdges, data: !showEdges.data }; setShowEdges(n); showEdgesRef.current = n; },
+        }, 'Data'),
+        React.createElement('button', {
+          className: `btn${showEdges.guide ? ' active' : ''}`,
+          style: showEdges.guide ? { borderColor: '#f85149', color: '#f85149' } : {},
+          onClick: () => { const n = { ...showEdges, guide: !showEdges.guide }; setShowEdges(n); showEdgesRef.current = n; },
+        }, 'Guide'),
+      ),
+      React.createElement(FilterControl, { graphData, filter, onFilter: setFilterAndRef }),
+    ),
+    // Tree panel
+    React.createElement(TreePanel, {
+      graphData,
+      selectedId: selected?.type === 'node' ? selected.data?.node_id : null,
+      onSelect: onTreeSelect,
+      onFocus: onTreeFocus,
+      onDelete,
+      expanded: expandedNodes,
+      onToggleExpand: toggleExpand,
+      width: treeWidth,
+      onResize: onTreeResize,
+      onSetFocus: (nid) => {
+        setFilterAndRef({ root: nid, mode: 'descendants' });
+        if (!expandedRef.current[nid]) toggleExpand(nid);
+      },
+    }),
+    // React Flow
+    React.createElement(ReactFlow, {
+      nodes, edges,
+      onNodesChange: handleNodesChange,
+      onEdgesChange,
+      onConnect,
+      onReconnect,
+      edgesReconnectable: true,
+      onNodeClick,
+      onNodeDoubleClick,
+      onEdgeClick,
+      onPaneClick,
+      nodeTypes,
+      fitView: true,
+      proOptions: { hideAttribution: true },
+      defaultEdgeOptions: { type: 'smoothstep', pathOptions: { offset: 30, borderRadius: 12 }, markerEnd: { type: 'arrowclosed', color: '#58a6ff', width: 20, height: 20 } },
+      style: { background: '#0d1117' },
+    },
+      React.createElement(FocusHelper, { focusRef, positionsRef }),
+      React.createElement(Controls, { position: 'bottom-left' }),
+      React.createElement(MiniMap, {
+        nodeColor: () => '#30363d',
+        maskColor: 'rgba(13,17,23,0.8)',
+        style: { background: '#161b22' },
+      }),
+      React.createElement(Background, { color: '#21262d', gap: 20 }),
+    ),
+    // Inspector
+    React.createElement(Inspector, {
+      selected,
+      graphData,
+      onOpenChannel: (nodeId, ch) => { setChannelView({ nodeId, channel: ch }); setProgramView(null); },
+      onOpenProgram: (nodeId, name, data) => { setProgramView({ nodeId, name, data }); setChannelView(null); },
+      onDelete,
+      width: inspWidth,
+      onResize: onInspResize,
+    }),
+    // Program panel
+    programView && React.createElement(ProgramPanel, {
+      nodeId: programView.nodeId,
+      progName: programView.name,
+      progData: programView.data,
+      nodeName: graphData.nodes[programView.nodeId]?.class_name,
+      onClose: () => setProgramView(null),
+      height: bottomHeight, onResize: onBottomResize,
+    }),
+    // Channel panel
+    channelView && React.createElement(ChannelPanel, {
+      nodeId: channelView.nodeId,
+      channel: channelView.channel,
+      nodeName: graphData.nodes[channelView.nodeId]?.class_name,
+      nodeData: graphData.nodes[channelView.nodeId],
+      onClose: () => setChannelView(null),
+      height: bottomHeight, onResize: onBottomResize,
+    }),
+  );
+}
+
+createRoot(document.getElementById('root')).render(
+  React.createElement(ReactFlowProvider, null, React.createElement(App))
+);
+</script>
+</body>
+</html>

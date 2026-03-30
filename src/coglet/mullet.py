@@ -1,9 +1,8 @@
 """MulLet mixin — fan-out N identical children with scatter/gather.
 
 The parent COG creates N children via create_mul() and coordinates them with
-map/reduce semantics. scatter() distributes events via map(), gather() collects
-one result from each child and aggregates via reduce(). Override map()/reduce()
-for custom routing and aggregation.
+map/reduce semantics. scatter() distributes events via the runtime channel
+mechanism, gather() collects one result from each child.
 """
 from __future__ import annotations
 
@@ -18,8 +17,7 @@ if TYPE_CHECKING:
 class MulLet:
     """Mixin: fan-out N identical children behind one CogletHandle.
 
-    Subclass must implement map() and reduce().
-    Must be mixed with Coglet to access create()/guide().
+    Must be mixed with Coglet to access create()/guide()/send().
     """
 
     def __init__(self, **kwargs: Any) -> None:
@@ -45,17 +43,14 @@ class MulLet:
             await self.guide(handle, command)  # type: ignore[attr-defined]
 
     async def scatter(self, channel: str, event: Any) -> None:
-        """Scatter an event to children via map()."""
+        """Scatter an event to children via runtime.send()."""
         mappings = self.map(event)
         for child_idx, child_event in mappings:
             handle = self._mul_children[child_idx]
-            await handle.coglet._dispatch_listen(channel, child_event)
+            await self.send(handle, channel, child_event)  # type: ignore[attr-defined]
 
     async def gather(self, channel: str) -> Any:
-        """Collect one result from each child, then reduce."""
-        results: list[Any] = []
-        for handle in self._mul_children:
-            sub = handle.coglet._bus.subscribe(channel)
-            data = await sub.get()
-            results.append(data)
+        """Collect one result from each child via observe_one(), then reduce."""
+        futures = [h.observe_one(channel) for h in self._mul_children]
+        results = [await f for f in futures]
         return self.reduce(results)

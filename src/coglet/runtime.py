@@ -29,6 +29,8 @@ class CogletRuntime:
         self._parents: dict[int, Coglet] = {}         # id(coglet) -> parent
         self._restart_counts: dict[int, int] = {}     # id(coglet) -> count
         self._trace = trace
+        self._on_spawn: list[Any] = []  # callbacks: (handle, config, parent) -> None
+        self._on_link: list[Any] = []   # callbacks: (src, src_ch, dest, dest_ch, task) -> None
 
     def _instantiate(self, config: CogBase) -> Coglet:
         coglet = config.cls(**config.kwargs)
@@ -63,12 +65,16 @@ class CogletRuntime:
     ) -> CogletHandle:
         coglet = self._instantiate(config)
         handle = CogletHandle(coglet)
+        coglet._handle = handle
         self._handles.append(handle)
         self._coglets.append(coglet)
         self._configs[id(coglet)] = config
         if parent is not None:
             self._parents[id(coglet)] = parent
         self._restart_counts[id(coglet)] = 0
+
+        for cb in self._on_spawn:
+            cb(handle, config, parent)
 
         if isinstance(coglet, LifeLet):
             await coglet.on_start()
@@ -81,6 +87,36 @@ class CogletRuntime:
     async def run(self, config: CogBase) -> CogletHandle:
         """Boot a root coglet and return its handle."""
         return await self.spawn(config)
+
+    def link(self, src: CogletHandle, src_channel: str,
+             dest: CogletHandle, dest_channel: str) -> asyncio.Task:
+        """Wire src's transmit channel to dest's @listen handler.
+
+        Returns the background task piping data. Cancel it to unlink.
+        """
+        sub = src.coglet._bus.subscribe(src_channel)
+
+        async def _pipe():
+            try:
+                async for data in sub:
+                    try:
+                        await dest.coglet._dispatch_listen(dest_channel, data)
+                    except Exception as e:
+                        import traceback
+                        print(f"[link] error in {dest_channel}: {e}")
+                        traceback.print_exc()
+            except asyncio.CancelledError:
+                pass
+
+        task = asyncio.create_task(_pipe())
+        # Notify listeners (e.g. CLI registry)
+        for cb in self._on_link:
+            cb(src, src_channel, dest, dest_channel, task)
+        return task
+
+    async def send(self, handle: CogletHandle, channel: str, data: Any) -> None:
+        """Send data to a coglet's channel (fires handler + pushes to bus)."""
+        await handle.coglet._dispatch_listen(channel, data)
 
     async def shutdown(self) -> None:
         """Stop all coglets in reverse order."""
@@ -147,13 +183,37 @@ class CogletRuntime:
         if isinstance(new_coglet, TickLet):
             await new_coglet._start_tickers()
 
+    def _get_descendants(self, coglet: Coglet) -> list[Coglet]:
+        """Get all descendants of a coglet (depth-first)."""
+        descendants = []
+        for child_handle in coglet._children:
+            descendants.append(child_handle.coglet)
+            descendants.extend(self._get_descendants(child_handle.coglet))
+        return descendants
+
     async def _stop_coglet(self, coglet: Coglet) -> None:
+        """Stop a coglet and all its descendants (children first)."""
+        # Collect all descendants, stop in reverse (leaves first)
+        descendants = self._get_descendants(coglet)
+        for desc in reversed(descendants):
+            await self._stop_one(desc)
+        await self._stop_one(coglet)
+        # Remove from parent's children list
+        parent = self._parents.get(id(coglet))
+        if parent:
+            parent._children = [h for h in parent._children if h.coglet is not coglet]
+
+    async def _stop_one(self, coglet: Coglet) -> None:
+        """Stop a single coglet (no cascade)."""
         if isinstance(coglet, TickLet):
             await coglet._stop_tickers()
         if isinstance(coglet, LifeLet):
             await coglet.on_stop()
         if coglet in self._coglets:
             self._coglets.remove(coglet)
+        self._configs.pop(id(coglet), None)
+        self._parents.pop(id(coglet), None)
+        self._restart_counts.pop(id(coglet), None)
 
     # --- Tree visualization ---
 

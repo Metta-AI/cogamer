@@ -26,8 +26,10 @@ class ChannelStats:
     def __init__(self):
         # deque of timestamps per channel
         self._timestamps: dict[str, collections.deque] = {}
-        # last N messages per channel
+        # last N messages per channel (each entry: {"ts": monotonic, "data": ...})
         self._history: dict[str, collections.deque] = {}
+        # Offset to convert monotonic → epoch
+        self._epoch_offset = time.time() - time.monotonic()
 
     def record(self, channel: str, data: Any) -> None:
         now = time.monotonic()
@@ -35,7 +37,7 @@ class ChannelStats:
             self._timestamps[channel] = collections.deque()
             self._history[channel] = collections.deque(maxlen=HISTORY_SIZE)
         self._timestamps[channel].append(now)
-        self._history[channel].append(data)
+        self._history[channel].append({"ts": now, "data": data})
 
     def counts(self, channel: str) -> dict[str, int]:
         """Return message counts for each window."""
@@ -52,11 +54,13 @@ class ChannelStats:
         return result
 
     def history(self, channel: str, n: int | None = None) -> list:
-        """Return last N messages (default: all retained)."""
+        """Return last N messages with epoch timestamps."""
         hist = self._history.get(channel, collections.deque())
-        if n is None:
-            return list(hist)
-        return list(hist)[-n:]
+        items = list(hist) if n is None else list(hist)[-n:]
+        return [
+            {"ts": entry["ts"] + self._epoch_offset, "data": entry["data"]}
+            for entry in items
+        ]
 
     def all_counts(self) -> dict[str, dict[str, int]]:
         """Return counts for all channels."""

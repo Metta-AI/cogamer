@@ -1,4 +1,4 @@
-"""Tests for cogweb.ui server — REST API and WebSocket graph endpoint."""
+"""Tests for coglet.ui server — REST API and WebSocket graph endpoint."""
 from __future__ import annotations
 
 import json
@@ -7,7 +7,7 @@ import pytest
 
 from coglet import Coglet, CogBase, CogletRuntime, LifeLet
 from coglet.weblet import CogWebRegistry, WebLet
-from cogweb.ui.server import CogWebUI, _STATIC_DIR
+from coglet.ui.server import CogWebUI, _STATIC_DIR
 
 
 class WebNode(Coglet, WebLet, LifeLet):

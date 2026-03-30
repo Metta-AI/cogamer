@@ -30,7 +30,7 @@ class CogletShell(cmd.Cmd):
         self.port = port
         self._cache_ids: list[str] = []
         self._cache_channels: dict[str, dict] = {}  # id -> {transmit, listen}
-        self._observe_thread: threading.Thread | None = None
+        self._observers: dict[str, threading.Event] = {}  # "id:ch" -> stop event
         # Remove ':' from readline delimiters so id:channel completes as one token
         delims = readline.get_completer_delims()
         readline.set_completer_delims(delims.replace(":", ""))
@@ -363,32 +363,104 @@ class CogletShell(cmd.Cmd):
         return self._id_completions(text)
 
     def do_observe(self, arg):
-        """Observe channel (streams until ctrl-c): observe ID:CHANNEL"""
-        if not arg or ":" not in arg:
-            print("  usage: observe ID:CHANNEL")
+        """Observe a channel in the background: observe ID[:CHANNEL]
+
+        With no active observations, blocks until ctrl-c.
+        Use 'observe --stop [ID:CHANNEL]' to disconnect.
+        Use 'observe --list' to see active observations.
+        """
+        if arg == "--list":
+            if not self._observers:
+                print("  no active observations")
+            for key in self._observers:
+                print(f"  {key}")
             return
-        cid, ch = arg.split(":", 1)
+
+        if arg == "--stop":
+            if not self._observers:
+                print("  no active observations")
+                return
+            for key, stop_ev in list(self._observers.items()):
+                stop_ev.set()
+                print(f"  stopped {key}")
+            self._observers.clear()
+            return
+
+        if arg and arg.startswith("--stop "):
+            ref = arg[7:].strip()
+            stop_ev = self._observers.pop(ref, None)
+            if stop_ev:
+                stop_ev.set()
+                print(f"  stopped {ref}")
+            else:
+                print(f"  not observing {ref}")
+            return
+
+        if not arg:
+            print("  usage: observe ID[:CHANNEL]  |  observe --stop [ID:CH]  |  observe --list")
+            return
+
+        if ":" not in arg:
+            # Show available channels and let user pick
+            ch_info = self._get_channels(arg)
+            channels = sorted(set(
+                ch_info.get("transmit", []) + ch_info.get("listen", [])
+            ))
+            if not channels:
+                print(f"  {arg} has no channels")
+                return
+            print(f"  channels for {arg}:")
+            for i, c in enumerate(channels, 1):
+                print(f"    {i}) {c}")
+            try:
+                choice = input("  channel> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return
+            if choice.isdigit() and 1 <= int(choice) <= len(channels):
+                ch = channels[int(choice) - 1]
+            elif choice in channels:
+                ch = choice
+            else:
+                print(f"  invalid choice: {choice}")
+                return
+            cid = arg
+        else:
+            cid, ch = arg.split(":", 1)
+
+        ref = f"{cid}:{ch}"
+        if ref in self._observers:
+            print(f"  already observing {ref}")
+            return
+
         url = self._url(f"/observe/{cid}/{ch}")
-        print(f"  observing {cid}:{ch} (ctrl-c to stop)...")
+        stop_event = threading.Event()
+        self._observers[ref] = stop_event
 
         def _stream():
             try:
                 with urllib.request.urlopen(url) as resp:
                     for raw in resp:
+                        if stop_event.is_set():
+                            break
                         line = raw.decode().strip()
                         if line.startswith("data: "):
-                            print(f"  << {line[6:]}")
+                            print(f"  [{ref}] {line[6:]}")
             except Exception:
                 pass
+            finally:
+                self._observers.pop(ref, None)
 
-        self._observe_thread = threading.Thread(target=_stream, daemon=True)
-        self._observe_thread.start()
-        try:
-            self._observe_thread.join()
-        except KeyboardInterrupt:
-            print("\n  stopped observing.")
+        t = threading.Thread(target=_stream, daemon=True)
+        t.start()
+        print(f"  observing {ref} (use 'observe --stop' to disconnect)")
 
     def complete_observe(self, text, line, begidx, endidx):
+        stripped = line.lstrip()
+        if "--stop" in stripped:
+            # Complete active observation refs
+            after = stripped.split("--stop", 1)[1].strip()
+            return [k for k in self._observers if k.startswith(after or text)]
         return self._channel_ref_completions(text)
 
     def do_link(self, arg):

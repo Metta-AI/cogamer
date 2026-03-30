@@ -1,6 +1,6 @@
-"""CogWeb UI server — FastAPI + WebSocket bridge to CogWebRegistry.
+"""Coglet UI server — FastAPI + WebSocket bridge to CogWebRegistry.
 
-Serves the React Flow frontend and provides:
+Serves the frontend and provides:
   GET  /           — single-page app (graph editor)
   GET  /api/graph  — JSON snapshot of the current graph
   WS   /ws         — live graph updates pushed to the browser
@@ -15,7 +15,7 @@ from typing import Any
 
 from coglet.weblet import CogWebRegistry
 
-logger = logging.getLogger("cogweb.ui")
+logger = logging.getLogger("coglet.ui")
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -25,7 +25,7 @@ class CogWebUI:
 
     Usage:
         from coglet.weblet import CogWebRegistry
-        from cogweb.ui import CogWebUI
+        from coglet.ui import CogWebUI
 
         registry = CogWebRegistry()
         ui = CogWebUI(registry, host="0.0.0.0", port=8787)
@@ -153,7 +153,7 @@ class CogWebUI:
 
         self._server_task = asyncio.create_task(server.serve())
         self._broadcast_task = asyncio.create_task(self._broadcast_loop())
-        logger.info(f"CogWeb UI running at http://{self.host}:{self.port}")
+        logger.info(f"Coglet UI running at http://{self.host}:{self.port}")
 
     async def stop(self) -> None:
         """Stop the UI server."""

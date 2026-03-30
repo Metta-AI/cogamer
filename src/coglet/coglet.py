@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any, AsyncIterator, Callable
 
-from coglet.channel import ChannelBus
+from coglet.channel import ChannelBus, ChannelStats
 from coglet.handle import CogBase, CogletHandle, Command
 
 
@@ -73,8 +73,15 @@ class Coglet:
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._bus = ChannelBus()
+        self._inbound_stats = ChannelStats()  # tracks @listen inbound messages
         self._children: list[CogletHandle] = []
         self._runtime: Any = None  # set by CogletRuntime
+        self._handle: Any = None   # set by CogletRuntime
+
+    @property
+    def handle(self) -> CogletHandle:
+        """This coglet's own handle (for self-linking)."""
+        return self._handle
 
     # --- LET: transmit ---
 
@@ -92,6 +99,19 @@ class Coglet:
         handle: CogletHandle = await self._runtime.spawn(config, parent=self)
         self._children.append(handle)
         return handle
+
+    def link(self, src: CogletHandle, src_channel: str,
+             dest: CogletHandle, dest_channel: str):
+        """Wire src's output channel to dest's input channel via the runtime."""
+        if self._runtime is None:
+            raise RuntimeError("Coglet not attached to a runtime")
+        return self._runtime.link(src, src_channel, dest, dest_channel)
+
+    async def send(self, handle: CogletHandle, channel: str, data: Any) -> None:
+        """Send data to a child's channel."""
+        if self._runtime is None:
+            raise RuntimeError("Coglet not attached to a runtime")
+        await self._runtime.send(handle, channel, data)
 
     async def observe(self, handle: CogletHandle, channel: str) -> AsyncIterator[Any]:
         async for data in handle.observe(channel):
@@ -117,6 +137,9 @@ class Coglet:
     # --- Internal dispatch ---
 
     async def _dispatch_listen(self, channel: str, data: Any) -> None:
+        self._inbound_stats.record(channel, data)
+        # Push to bus so linked subscribers (from runtime.link()) see this data
+        await self._bus.transmit(channel, data)
         method_name = self._listen_handlers.get(channel)
         if method_name is None:
             return

@@ -32,6 +32,7 @@ class CogBase:
     """
     cls: Type
     kwargs: dict[str, Any] = field(default_factory=dict)
+    label: str = ""             # optional display label for UI
     restart: str = "never"      # "never" | "on_error" | "always"
     max_restarts: int = 3
     backoff_s: float = 1.0
@@ -50,6 +51,15 @@ class CogletHandle:
         sub = self._coglet._bus.subscribe(channel)
         async for data in sub:
             yield data
+
+    def observe_one(self, channel: str) -> asyncio.Task:
+        """Subscribe to a channel and return a Task that resolves to the next message.
+
+        The subscription is created immediately (not lazily), so it won't
+        miss messages sent between calling observe_one() and awaiting.
+        """
+        sub = self._coglet._bus.subscribe(channel)
+        return asyncio.ensure_future(sub.get())
 
     async def guide(self, command: Command) -> None:
         """Fire-and-forget command to child's @enact handlers."""
