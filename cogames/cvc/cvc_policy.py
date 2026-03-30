@@ -27,8 +27,12 @@ from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 from mettagrid.simulator import Action
 from mettagrid.simulator.interface import AgentObservation
 
-from coglet.llm_executor import LLMExecutor
-from coglet.proglet import Program
+try:
+    from coglet.llm_executor import LLMExecutor
+    from coglet.proglet import Program
+except ImportError:
+    LLMExecutor = None  # type: ignore[assignment,misc]
+    Program = None  # type: ignore[assignment,misc]
 
 _ELEMENTS = ("carbon", "oxygen", "germanium", "silicon")
 _LLM_INTERVAL = 500
@@ -113,15 +117,19 @@ def _parse_analysis(text: str) -> dict:
     return result
 
 
-ANALYZE_RESOURCES = Program(
-    executor="llm",
-    parser=_parse_analysis,
-    config={
-        "model": "claude-sonnet-4-20250514",
-        "max_tokens": 150,
-        "temperature": 0.2,
-        "max_turns": 1,
-    },
+ANALYZE_RESOURCES = (
+    Program(
+        executor="llm",
+        parser=_parse_analysis,
+        config={
+            "model": "claude-sonnet-4-20250514",
+            "max_tokens": 150,
+            "temperature": 0.2,
+            "max_turns": 1,
+        },
+    )
+    if Program is not None
+    else None
 )
 
 
@@ -145,7 +153,7 @@ class CogletPolicyImpl(StatefulPolicyImpl[CogletAgentState]):
         self,
         policy_env_info: PolicyEnvInterface,
         agent_id: int,
-        llm_executor: LLMExecutor | None = None,
+        llm_executor: Any = None,
         game_id: str = "",
     ) -> None:
         self._policy_env_info = policy_env_info
@@ -283,7 +291,7 @@ class CogletPolicy(MultiAgentPolicy):
     def __init__(self, policy_env_info: PolicyEnvInterface, device: str = "cpu", **kwargs: Any):
         super().__init__(policy_env_info, device=device, **kwargs)
         self._agent_policies: dict[int, StatefulAgentPolicy[CogletAgentState]] = {}
-        self._llm_executor: LLMExecutor | None = None
+        self._llm_executor: Any = None
         self._episode_start = time.time()
         self._game_id = kwargs.get("game_id", f"game_{int(time.time())}")
         self._init_llm()
@@ -350,5 +358,8 @@ class CogletPolicy(MultiAgentPolicy):
         path.write_text(json.dumps(learnings, indent=2, default=str))
 
 
-# PCO-driven variant
-from cvc.table_policy import CvCPolicyCoglet  # noqa: F401
+# PCO-driven variant (not available in tournament bundle)
+try:
+    from cvc.table_policy import CvCPolicyCoglet  # noqa: F401
+except ImportError:
+    pass

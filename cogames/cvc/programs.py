@@ -12,7 +12,20 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from coglet.proglet import Program
+try:
+    from coglet.proglet import Program
+except ImportError:
+    from dataclasses import dataclass, field as _field
+    from typing import Callable
+
+    @dataclass  # type: ignore[no-redef]
+    class Program:  # type: ignore[no-redef]
+        executor: str = "python"
+        fn: Callable | None = None
+        system: str | Callable | None = None
+        tools: list[str] = _field(default_factory=list)
+        parser: Callable | None = None
+        config: dict[str, Any] = _field(default_factory=dict)
 from mettagrid.simulator import Action
 
 from cvc.agent import helpers as _h

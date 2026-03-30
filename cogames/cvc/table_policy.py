@@ -27,8 +27,12 @@ from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 from mettagrid.simulator import Action
 from mettagrid.simulator.interface import AgentObservation
 
-from coglet.llm_executor import LLMExecutor
-from coglet.proglet import Program
+try:
+    from coglet.llm_executor import LLMExecutor
+    from coglet.proglet import Program
+except ImportError:
+    LLMExecutor = None  # type: ignore[assignment,misc]
+    Program = None  # type: ignore[assignment,misc]
 
 _LLM_INTERVAL = 500
 _LOG_INTERVAL = 500
