@@ -1,12 +1,12 @@
-"""TablePolicy: program-table-driven CvC policy adapter.
+"""CvCPolicyCoglet: program-table-driven CvC policy adapter.
 
 Dispatches through a flat program table operating on GameState.
 Each agent is fully independent — no CogletAgentPolicy engine.
 
 Architecture:
-  TablePolicy (MultiAgentPolicy)
-    └─ StatefulAgentPolicy[TableAgentState]  (one per agent)
-         └─ TablePolicyImpl (StatefulPolicyImpl)
+  CvCPolicyCoglet (MultiAgentPolicy)
+    └─ StatefulAgentPolicy[CvCAgentState]  (one per agent)
+         └─ CvCPolicyImpl (StatefulPolicyImpl)
               └─ GameState (observation processing + mutable state)
               └─ Program table (step/heal/retreat/mine/align/scramble/explore)
               └─ LLM brain (periodic analysis via "analyze" program)
@@ -36,7 +36,7 @@ _LEARNINGS_DIR = os.environ.get("COGLET_LEARNINGS_DIR", "/tmp/coglet_learnings")
 
 
 @dataclass
-class TableAgentState:
+class CvCAgentState:
     """All mutable state for one agent."""
     game_state: GameState | None = None
     last_llm_step: int = 0
@@ -49,7 +49,7 @@ class TableAgentState:
     experience: list[dict] = field(default_factory=list)
 
 
-class TablePolicyImpl(StatefulPolicyImpl[TableAgentState]):
+class CvCPolicyImpl(StatefulPolicyImpl[CvCAgentState]):
     """Per-agent decision logic using the program table."""
 
     def __init__(
@@ -66,9 +66,9 @@ class TablePolicyImpl(StatefulPolicyImpl[TableAgentState]):
         self._llm_executor = llm_executor
         self._game_id = game_id
 
-    def initial_agent_state(self) -> TableAgentState:
+    def initial_agent_state(self) -> CvCAgentState:
         gs = GameState(self._policy_env_info, agent_id=self._agent_id)
-        return TableAgentState(game_state=gs)
+        return CvCAgentState(game_state=gs)
 
     def _invoke_sync(self, name: str, *args: Any) -> Any:
         """Synchronous program invocation for code programs."""
@@ -78,8 +78,8 @@ class TablePolicyImpl(StatefulPolicyImpl[TableAgentState]):
         raise ValueError(f"Cannot sync-invoke {name} (executor={prog.executor})")
 
     def step_with_state(
-        self, obs: AgentObservation, state: TableAgentState
-    ) -> tuple[Action, TableAgentState]:
+        self, obs: AgentObservation, state: CvCAgentState
+    ) -> tuple[Action, CvCAgentState]:
         gs = state.game_state
         assert gs is not None
 
@@ -116,7 +116,7 @@ class TablePolicyImpl(StatefulPolicyImpl[TableAgentState]):
     def _llm_analyze(
         self,
         gs: GameState,
-        state: TableAgentState,
+        state: CvCAgentState,
     ) -> None:
         """Run the analyze LLM program via the program table."""
         try:
@@ -166,7 +166,7 @@ class TablePolicyImpl(StatefulPolicyImpl[TableAgentState]):
                 "error": str(e),
             })
 
-    def _adapt_interval(self, state: TableAgentState) -> None:
+    def _adapt_interval(self, state: CvCAgentState) -> None:
         """Adjust LLM call frequency based on latency."""
         if not state.llm_latencies:
             return
@@ -178,14 +178,14 @@ class TablePolicyImpl(StatefulPolicyImpl[TableAgentState]):
             state.llm_interval = min(1000, state.llm_interval + 100)
 
 
-class TablePolicy(MultiAgentPolicy):
+class CvCPolicyCoglet(MultiAgentPolicy):
     """Top-level CvC policy backed by a mutable program table.
 
     Dispatches through the program table instead of hard-coded
     CvcEngine._choose_action.
     """
 
-    short_names = ["coglet-table", "table-policy"]
+    short_names = ["coglet-cvc", "cvc-policy-coglet"]
     minimum_action_timeout_ms = 30_000
 
     def __init__(
@@ -197,7 +197,7 @@ class TablePolicy(MultiAgentPolicy):
     ):
         super().__init__(policy_env_info, device=device, **kwargs)
         self._programs = programs or all_programs()
-        self._agent_policies: dict[int, StatefulAgentPolicy[TableAgentState]] = {}
+        self._agent_policies: dict[int, StatefulAgentPolicy[CvCAgentState]] = {}
         self._llm_executor: LLMExecutor | None = None
         self._episode_start = time.time()
         self._game_id = kwargs.get("game_id", f"game_{int(time.time())}")
@@ -217,9 +217,9 @@ class TablePolicy(MultiAgentPolicy):
     def programs(self) -> dict[str, Program]:
         return self._programs
 
-    def agent_policy(self, agent_id: int) -> StatefulAgentPolicy[TableAgentState]:
+    def agent_policy(self, agent_id: int) -> StatefulAgentPolicy[CvCAgentState]:
         if agent_id not in self._agent_policies:
-            impl = TablePolicyImpl(
+            impl = CvCPolicyImpl(
                 self._policy_env_info,
                 agent_id,
                 programs=self._programs,
@@ -235,7 +235,7 @@ class TablePolicy(MultiAgentPolicy):
         """Collect experience from all agents for PCO."""
         all_exp: list[dict] = []
         for aid, wrapper in self._agent_policies.items():
-            st: TableAgentState | None = getattr(wrapper, "_state", None)
+            st: CvCAgentState | None = getattr(wrapper, "_state", None)
             if st:
                 all_exp.extend(st.experience)
         return sorted(all_exp, key=lambda x: x.get("step", 0))
@@ -256,7 +256,7 @@ class TablePolicy(MultiAgentPolicy):
         all_snaps: list[dict] = []
 
         for aid, wrapper in self._agent_policies.items():
-            st: TableAgentState | None = getattr(wrapper, "_state", None)
+            st: CvCAgentState | None = getattr(wrapper, "_state", None)
             if st is None:
                 continue
             gs = st.game_state

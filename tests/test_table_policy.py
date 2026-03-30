@@ -1,4 +1,4 @@
-"""Tests for TablePolicy program-table-driven CvC policy adapter.
+"""Tests for CvCPolicyCoglet program-table-driven CvC policy adapter.
 
 Basic construction/structure tests — we can't run cogames without the full
 environment, so these verify imports, program table wiring, and dataclass
@@ -7,18 +7,18 @@ defaults.
 from __future__ import annotations
 
 from cvc.programs import all_programs, seed_programs
-from cvc.table_policy import TableAgentState, TablePolicy, TablePolicyImpl
+from cvc.table_policy import CvCAgentState, CvCPolicyCoglet, CvCPolicyImpl
 
 from coglet.proglet import Program
 
 
 # ---------------------------------------------------------------------------
-# TableAgentState
+# CvCAgentState
 # ---------------------------------------------------------------------------
 
 def test_table_agent_state_defaults():
-    """TableAgentState initializes with sane defaults."""
-    state = TableAgentState()
+    """CvCAgentState initializes with sane defaults."""
+    state = CvCAgentState()
     assert state.game_state is None
     assert state.last_llm_step == 0
     assert state.llm_interval == 500
@@ -35,7 +35,7 @@ def test_table_agent_state_defaults():
 # ---------------------------------------------------------------------------
 
 def test_all_programs_has_step():
-    """all_programs() includes the 'step' program needed by TablePolicyImpl."""
+    """all_programs() includes the 'step' program needed by CvCPolicyImpl."""
     programs = all_programs()
     assert "step" in programs
     step = programs["step"]
@@ -45,7 +45,7 @@ def test_all_programs_has_step():
 
 
 def test_seed_programs_has_required_keys():
-    """seed_programs() returns all programs needed by TablePolicyImpl."""
+    """seed_programs() returns all programs needed by CvCPolicyImpl."""
     programs = seed_programs()
     required = {"step", "hold", "retreat", "mine", "align", "scramble",
                 "explore", "summarize", "analyze", "desired_role"}
@@ -62,7 +62,7 @@ def test_seed_programs_analyze_is_llm():
 
 
 # ---------------------------------------------------------------------------
-# TablePolicyImpl._invoke_sync
+# CvCPolicyImpl._invoke_sync
 # ---------------------------------------------------------------------------
 
 def test_invoke_sync_calls_code_program():
@@ -76,7 +76,7 @@ def test_invoke_sync_calls_code_program():
     programs = {"test_prog": Program(executor="code", fn=fake_fn)}
 
     # We only need _programs for _invoke_sync — no policy_env_info needed
-    impl = TablePolicyImpl.__new__(TablePolicyImpl)
+    impl = CvCPolicyImpl.__new__(CvCPolicyImpl)
     impl._programs = programs
 
     result = impl._invoke_sync("test_prog", "fake_gs")
@@ -87,7 +87,7 @@ def test_invoke_sync_calls_code_program():
 def test_invoke_sync_rejects_llm():
     """_invoke_sync raises ValueError for non-code programs."""
     programs = {"llm_prog": Program(executor="llm")}
-    impl = TablePolicyImpl.__new__(TablePolicyImpl)
+    impl = CvCPolicyImpl.__new__(CvCPolicyImpl)
     impl._programs = programs
 
     import pytest
@@ -96,17 +96,17 @@ def test_invoke_sync_rejects_llm():
 
 
 # ---------------------------------------------------------------------------
-# TablePolicy class attributes
+# CvCPolicyCoglet class attributes
 # ---------------------------------------------------------------------------
 
 def test_table_policy_short_names():
-    """TablePolicy registers with expected short names."""
-    assert TablePolicy.short_names == ["coglet-table", "table-policy"]
+    """CvCPolicyCoglet registers with expected short names."""
+    assert CvCPolicyCoglet.short_names == ["coglet-cvc", "cvc-policy-coglet"]
 
 
 def test_table_policy_minimum_timeout():
-    """TablePolicy sets minimum action timeout for LLM calls."""
-    assert TablePolicy.minimum_action_timeout_ms == 30_000
+    """CvCPolicyCoglet sets minimum action timeout for LLM calls."""
+    assert CvCPolicyCoglet.minimum_action_timeout_ms == 30_000
 
 
 # ---------------------------------------------------------------------------
@@ -115,23 +115,23 @@ def test_table_policy_minimum_timeout():
 
 def test_adapt_interval_decreases_on_fast_latency():
     """LLM interval decreases when latency is low."""
-    state = TableAgentState(llm_latencies=[500.0, 600.0, 700.0])
-    impl = TablePolicyImpl.__new__(TablePolicyImpl)
+    state = CvCAgentState(llm_latencies=[500.0, 600.0, 700.0])
+    impl = CvCPolicyImpl.__new__(CvCPolicyImpl)
     impl._adapt_interval(state)
     assert state.llm_interval < 500
 
 
 def test_adapt_interval_increases_on_slow_latency():
     """LLM interval increases when latency is high."""
-    state = TableAgentState(llm_latencies=[6000.0, 7000.0, 8000.0])
-    impl = TablePolicyImpl.__new__(TablePolicyImpl)
+    state = CvCAgentState(llm_latencies=[6000.0, 7000.0, 8000.0])
+    impl = CvCPolicyImpl.__new__(CvCPolicyImpl)
     impl._adapt_interval(state)
     assert state.llm_interval > 500
 
 
 def test_adapt_interval_noop_when_empty():
     """_adapt_interval does nothing with no latency data."""
-    state = TableAgentState()
-    impl = TablePolicyImpl.__new__(TablePolicyImpl)
+    state = CvCAgentState()
+    impl = CvCPolicyImpl.__new__(CvCPolicyImpl)
     impl._adapt_interval(state)
     assert state.llm_interval == 500

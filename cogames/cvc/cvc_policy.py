@@ -351,4 +351,4 @@ class CogletPolicy(MultiAgentPolicy):
 
 
 # PCO-driven variant
-from cvc.table_policy import TablePolicy  # noqa: F401
+from cvc.table_policy import CvCPolicyCoglet  # noqa: F401
