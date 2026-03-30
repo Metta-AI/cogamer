@@ -45,28 +45,24 @@ def aligner_target_score(
         if any(manhattan(candidate.position, enemy.position) <= _JUNCTION_AOE_RANGE for enemy in enemy_junctions)
         else 0.0
     )
-    # Prefer junctions close to any friendly source (hub or captured junction)
-    # This enables chain-building: junctions far from hub but near captured junctions are cheap
-    network_penalty = 0.0
-    if friendly_sources:
-        nearest_source_dist = float(min(manhattan(source.position, candidate.position) for source in friendly_sources))
-    elif hub_position is not None:
-        nearest_source_dist = float(manhattan(hub_position, candidate.position))
-    else:
-        nearest_source_dist = 0.0
-    if nearest_source_dist > 0:
-        if nearest_source_dist > 20:
-            network_penalty = (nearest_source_dist - 20) * 5.0 + 15.0
-        elif nearest_source_dist > 12:
-            network_penalty = (nearest_source_dist - 12) * 1.5 + 3.0
+    # Strongly prefer hub-proximal junctions: less travel, safer from ships, faster cycling
+    hub_penalty = 0.0
+    if hub_position is not None:
+        hub_dist = float(manhattan(hub_position, candidate.position))
+        if hub_dist > 25:
+            hub_penalty = (hub_dist - 25) * 8.0 + 50.0
+        elif hub_dist > 15:
+            hub_penalty = (hub_dist - 15) * 3.0 + 10.0
+        elif hub_dist > 10:
+            hub_penalty = (hub_dist - 10) * 1.5 + 2.0
         else:
-            network_penalty = nearest_source_dist * 0.3
+            hub_penalty = hub_dist * 0.3
     return (
         distance
         - min(expansion * 5.0, 30.0)
         + enemy_aoe * 8.0
         + (_CLAIMED_TARGET_PENALTY if claimed_by_other else 0.0)
-        + network_penalty,
+        + hub_penalty,
         -float(expansion),
     )
 

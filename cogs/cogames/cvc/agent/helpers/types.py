@@ -20,16 +20,6 @@ _MOVE_DELTAS = {
 }
 
 _ALIGNER_EXPLORE_OFFSETS = (
-    # Inner ring (manhattan ~12) — closest junctions to hub
-    (0, -12),
-    (9, -9),
-    (12, 0),
-    (9, 9),
-    (0, 12),
-    (-9, 9),
-    (-12, 0),
-    (-9, -9),
-    # Outer ring (manhattan ~22) — hub alignment range edge
     (0, -22),
     (16, -16),
     (22, 0),
