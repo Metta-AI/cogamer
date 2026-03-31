@@ -146,7 +146,17 @@ def _unstick(gs: Any, role: str = "miner") -> tuple[Action, str]:
 
 
 def _desired_role(gs: Any) -> str:
-    return gs.desired_role()
+    base_role = gs.desired_role()
+    # Adaptive: if teammates are already mining, shift to aligner
+    if gs.mg_state is not None and gs.mg_state.team_summary is not None:
+        members = gs.mg_state.team_summary.members
+        if len(members) > 1:
+            team_miners = sum(1 for m in members if m.role == "miner")
+            team_aligners = sum(1 for m in members if m.role == "aligner")
+            # If plenty of miners on team already, this agent should align
+            if base_role == "miner" and team_miners >= 4 and team_aligners < 3:
+                return "aligner"
+    return base_role
 
 
 def _should_retreat(gs: Any) -> bool:
