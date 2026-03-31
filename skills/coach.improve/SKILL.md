@@ -1,80 +1,74 @@
 ---
 name: coach.improve
-description: Run one PCO improvement iteration. Plays a game, collects experience, runs CvCLearner to propose patches, tests locally, and submits if improved. Assumes session is already started (use coach.start-session first). Use when asked to "improve the agent" or "run PCO".
+description: Run one improvement iteration. Chooses between PCO and IntelligentDesign based on recent effectiveness, runs the chosen approach, falls back to the other if it fails. Use when asked to "improve the agent", "run a coaching session", or "coach improve".
 ---
 
-# PCO Improvement Iteration
+# Improvement Iteration
 
-Run one PCO (Proximal Coglet Optimizer) cycle: play → collect experience → learn → test → submit.
+Orchestrates improvement by choosing between `/coach.improve.pco` and `/coach.improve.design` based on effectiveness.
 
-Assumes `.coach/state.json` and the current session directory already exist (via `/coach.start-session`).
+Assumes `.coach/state.json` and the current session directory already exist (via `/coach.start-session`). Reads `IMPROVE.md` for domain context.
 
-## Steps
+## Step 1: Choose Approach
 
-### 1. Play a Game & Collect Experience
+Read `.coach/state.json` (check `approach_stats`) and `.coach/todos.md`. Pick the approach most likely to succeed this session.
 
-```bash
-cd <cogames_dir>  # from session_config.md
-rm -f /tmp/coglet_learnings/*.json
-ANTHROPIC_API_KEY= cogames scrimmage \
-  -m machina_1 \
-  -p class=<policy_class> \
-  -c 8 -e 1 --seed <random_seed> \
-  --action-timeout-ms 10000
+### Approach Stats (tracked in state.json)
+
+```json
+{
+  "approach_stats": {
+    "pco": {"attempts": 5, "improvements": 2, "last_used": "20260330-..."},
+    "design": {"attempts": 8, "improvements": 5, "last_used": "20260331-..."}
+  }
+}
 ```
 
-Use `ANTHROPIC_API_KEY=` to match tournament (no LLM). Pick a random seed 42-100.
+### Decision Rules
 
-### 2. Run PCO Epoch
+1. **If one approach has a clearly better hit rate**, prefer it (but still use the other ~30% of the time to keep exploring)
+2. **If PCO hasn't been run in 3+ sessions**, run PCO (fresh experience reveals new signals)
+3. **If there's a specific bug/TODO in todos.md**, prefer IntelligentDesign (targeted fixes)
+4. **If the alpha.0 reference in IMPROVE.md has an unaddressed gap**, prefer IntelligentDesign
+5. **If both are similar**, alternate
+6. **If no stats yet**, start with IntelligentDesign (the coach can see obvious wins first)
+
+Log the chosen approach in the session's `plan.md`.
+
+## Step 2: Run Chosen Approach
+
+Run `/coach.improve.pco` or `/coach.improve.design`.
+
+## Step 3: Handle Failure
+
+If the chosen approach didn't produce an improvement (no accepted patch, or scores regressed):
+
+1. Log the failure
+2. If time/context permits, try the **other** approach as a fallback
+3. If both fail, log it and move on — not every session produces a win
+
+## Step 4: Update Approach Stats
+
+After the session, update `approach_stats` in `.coach/state.json`:
 
 ```python
-import asyncio, json, glob, anthropic
-from cvc.pco_runner import run_pco_epoch
-from cvc.programs import all_programs
-
-f = glob.glob('/tmp/coglet_learnings/*.json')[0]
-experience = json.load(open(f))['snapshots']
-
-result = asyncio.run(run_pco_epoch(
-    experience=experience,
-    programs=all_programs(),
-    client=anthropic.Anthropic(),
-    max_retries=2,
-))
+stats = state["approach_stats"][approach]
+stats["attempts"] += 1
+if improved:
+    stats["improvements"] += 1
+stats["last_used"] = session_timestamp
 ```
 
-Log signals (resource, junction, survival magnitudes) and proposed patches.
-
-### 3. Review & Apply Patch
-
-If `result["accepted"]` and patch looks reasonable:
-- Fix any invalid API calls (the learner sometimes invents methods)
-- Apply to `programs.py` — only modify the specific function
-- **Valid GameState API**: `gs.hp`, `gs.position`, `gs.step_index`, `gs.role`, `gs.nearest_hub()`, `gs.known_junctions(predicate)`, `gs.should_retreat()`, `gs.choose_action(role)`, `gs.miner_action()`, `gs.aligner_action()`, `gs.scrambler_action()`, `gs.move_to_known(entity)`, `gs.explore(role)`, `gs.has_role_gear(role)`, `gs.needs_emergency_mining()`, `gs.team_id()`
-- **Valid helpers**: `_h.manhattan(pos1, pos2)`, `_h.team_id(state)`, `_h.resource_total(state)`
-
-### 4. Test Across Seeds
-
-Run 3+ seeds without LLM:
-```bash
-ANTHROPIC_API_KEY= cogames scrimmage -m machina_1 -p class=<policy_class> -c 8 -e 1 --seed <N> --action-timeout-ms 10000
+Also update `.coach/todos.md` with the approach tag:
 ```
-
-If average score drops vs baseline, **revert the patch**.
-
-### 5. Submit if Improved
-
-```bash
-cogames upload -p class=<policy_class> -n <policy_name> \
-  -f cvc -f mettagrid_sdk -f setup_policy.py \
-  --setup-script setup_policy.py --season <season> --skip-validation
+- [x] (ID) Fixed chain-aware scoring in helpers/targeting.py — +41% avg
+- [x] (PCO) Learner patched should_retreat with extra HP caution
+- [x] (ID) Improved LLM prompt to return role suggestions
 ```
-
-Log the submission version and "WAITING" status.
 
 ## Principles
 
-- **One patch per iteration.** Don't stack changes.
-- **Revert on regression.** A single bad seed collapse means revert.
-- **No shared state between agents.** Never use shared dicts.
-- **Check dead ends in todos.md** before trying anything.
+- **One change per session.** Don't stack changes from both approaches.
+- **Track what works.** The stats drive future decisions.
+- **Alternate when tied.** Don't get stuck in one mode.
+- **Fallback on failure.** If PCO produces nothing, try design (and vice versa).

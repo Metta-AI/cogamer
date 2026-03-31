@@ -14,7 +14,7 @@ Persist the current session's results to `.coach/` and optionally push to git.
 
 2. **Write session log**:
    - Ensure the current session's `log.md` has a final status (DONE, WAITING, or FAILED).
-   - Include: tournament scores checked, changes attempted, test results, submission version.
+   - Include: approach used (PCO or IntelligentDesign), changes attempted, test results, submission version.
 
 3. **Update state.json**:
    - `last_session`: current session timestamp
@@ -22,18 +22,19 @@ Persist the current session's results to `.coach/` and optionally push to git.
    - `latest_submission`: version if submitted
    - `tournament_best`: update if improved
    - `key_fix`: what changed
+   - `last_approach`: "PCO" or "IntelligentDesign"
 
 4. **Update todos.md**:
-   - Mark completed items as done
+   - Mark completed items as done, tagged with approach: `(PCO)` or `(ID)`
    - Add new dead ends discovered this session
-   - Add new improvement ideas from PCO signals
+   - Add new improvement ideas from PCO signals or code review
 
 5. **If git configured**, commit and push:
    ```bash
    git add .coach/state.json .coach/todos.md .coach/sessions/<current>/
    git add <any modified code files>
-   git commit -m "coach: session N — <summary>"
+   git commit -m "coach: session N — <approach>: <summary>"
    git push
    ```
 
-6. **Report**: session summary — what changed, what was submitted, current rank.
+6. **Report**: session summary — approach used, what changed, what was submitted, current rank.
