@@ -1,19 +1,19 @@
 # Coach TODO
 
 ## Current Priorities
-- [ ] Wait for v26/v27 freeplay+tournament results (teammate-aware targeting)
-- [ ] Test with 1v1 mode (`cogames run -c 16`) going forward, not just scrimmage
+- [ ] Monitor beta:v30 freeplay results and beta:v31 tournament advancement
+- [ ] Test with 1v1 mode (`cogames run -c 16`) to validate against real opponents
 - [ ] Investigate removing scramblers for cooperative scoring (both teams' scramblers reduce total junctions)
 
 ## Improvement Ideas
 - [ ] Read teammate vibes for more nuanced coordination (beyond position-based)
-- [ ] Wider enemy AOE with graduated bonus (not binary +10) — alpha.0 uses radius 20
 - [ ] Map topology analysis — understand wall patterns to improve exploration
 - [ ] Dynamic role switching — let agents switch roles based on game state
 - [ ] LLM brain integration — use analyze prompt for real-time strategic adaptation
 - [ ] PCO evolution — run PCO epochs to evolve program table
 - [ ] Better junction discovery — agents may miss junctions behind walls
-- [ ] Graduated enemy territory detection (small bonus at range 15, full bonus at range 4)
+- [ ] Adaptive role allocation based on game phase (not just step count)
+- [ ] Late-game optimization — shift more to aligners after step 5000
 
 ## Dead Ends (Don't Retry)
 - [x] Retreat threshold tuning — always trades deaths for score regression
@@ -52,3 +52,4 @@
 - [x] Session 12: emergency mining threshold tests — no improvement found
 - [x] Session 13: CRITICAL FIX — agent_id normalization (% 8) for tournament mode (1v1 avg 18.38, v19)
 - [x] Session 36: teammate-aware aligner targeting (+30% avg self-play), submitted v26/v27
+- [x] Session 37 (ID): Fix double role-adjustment + wider enemy retreat + junction memory 400→600 (+11% self-play, v30/v31)
