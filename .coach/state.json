@@ -1,13 +1,11 @@
 {
-  "last_session": "20260330-130000",
-  "best_score": 18.38,
-  "best_version": "agent_id normalization for tournament mode",
-  "total_sessions": 13,
-  "policy_name": "coglet-v0",
-  "season": "beta-cvc",
-  "tournament_best": 4.44,
-  "tournament_rank": 291,
-  "tournament_top": 14.82,
-  "latest_submission": "coglet-v0:v19",
-  "key_fix": "role_id = agent_id % 8 — agents 8-15 now get correct roles in tournament"
+  "last_session": "20260330-283000",
+  "best_score": 5.18,
+  "total_sessions": 31,
+  "policy_name": "beta",
+  "season": "beta-teams-tiny-fixed",
+  "tournament_best": 4.88,
+  "tournament_top": 11.58,
+  "latest_submission": "beta:v8",
+  "key_fix": "tournament RESET — fresh start, v7/v8 competing from stage 1 with all players"
 }
