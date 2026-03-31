@@ -187,7 +187,7 @@ def _step(gs: Any) -> tuple[Action, str]:
 
 
 def _summarize(gs: Any) -> dict:
-    """Experience snapshot for PCO learner."""
+    """Experience snapshot for PCO learner and LLM analysis."""
     hp = gs.hp
     pos = gs.position
     hub = gs.nearest_hub()
@@ -195,6 +195,15 @@ def _summarize(gs: Any) -> dict:
     friendly_j = len(gs.known_junctions(lambda e: e.owner == team)) if team else 0
     enemy_j = len(gs.known_junctions(lambda e: e.owner not in {None, "neutral", team})) if team else 0
     neutral_j = len(gs.known_junctions(lambda e: e.owner in {None, "neutral"}))
+
+    # Team role counts for LLM context
+    roles_str = ""
+    if gs.mg_state and gs.mg_state.team_summary:
+        role_counts: dict[str, int] = {}
+        for m in gs.mg_state.team_summary.members:
+            role_counts[m.role] = role_counts.get(m.role, 0) + 1
+        roles_str = ", ".join(f"{k}={v}" for k, v in sorted(role_counts.items()))
+
     return {
         "step": gs.step_index,
         "agent_id": gs.agent_id,
@@ -210,6 +219,7 @@ def _summarize(gs: Any) -> dict:
         "oscillating": _is_oscillating(gs),
         "has_gear": gs.has_role_gear(gs.role),
         "emergency_mining": gs.needs_emergency_mining(),
+        "roles": roles_str,
     }
 
 
@@ -220,25 +230,36 @@ def _summarize(gs: Any) -> dict:
 
 def _build_analysis_prompt(context: dict) -> str:
     """Build the LLM analysis prompt from extracted game context."""
+    j = context["junctions"]
     lines = [
         f"CvC game step {context['step']}/10000. 88x88 map, 8 agents per team.",
-        f"Agent {context['agent_id']}: HP={context['hp']}, Hearts={context['hearts']}",
+        f"Score = junctions held over time. MAXIMIZE friendly junctions held.",
+        f"",
+        f"Agent {context['agent_id']}: HP={context['hp']}, Hearts={context['hearts']}, Role={context.get('role', 'unknown')}",
+        f"Position: {context.get('position', 'unknown')}",
         f"Gear: aligner={context['aligner']} scrambler={context['scrambler']} miner={context['miner']}",
         f"Hub resources: {context['resources']}",
+        f"Team roles: {context.get('roles', 'unknown')}",
+        f"Junctions: friendly={j['friendly']} enemy={j['enemy']} neutral={j['neutral']}",
+        f"Stalled: {context.get('stalled', False)}, Oscillating: {context.get('oscillating', False)}",
+        f"Safe distance to hub: {context.get('safe_distance', 'unknown')}",
     ]
-    if context["roles"]:
-        lines.append(f"Team roles: {context['roles']}")
-
-    j = context["junctions"]
-    lines.append(
-        f"Visible junctions: friendly={j['friendly']} enemy={j['enemy']} neutral={j['neutral']}"
-    )
 
     lines.append(
-        "\nRespond with ONLY a JSON object (no other text):"
+        "\nAnalyze the game state and provide strategic guidance."
+        "\nRespond with ONLY a JSON object:"
         '\n{"resource_bias": "carbon"|"oxygen"|"germanium"|"silicon",'
-        ' "analysis": "1-2 sentence analysis"}'
-        "\nChoose resource_bias = the element with lowest supply."
+        ' "role": null|"miner"|"aligner"|"scrambler",'
+        ' "objective": null|"expand"|"defend"|"economy_bootstrap",'
+        ' "analysis": "1-2 sentence strategic assessment"}'
+        "\nRules:"
+        "\n- resource_bias: element with lowest supply"
+        "\n- role: suggest role change ONLY if agent is stuck/stagnating or"
+        "\n  team composition is badly unbalanced. null = keep current role."
+        "\n- objective: 'expand' if friendly < enemy (need more junctions),"
+        "\n  'defend' if we have junctions but enemy is catching up,"
+        "\n  'economy_bootstrap' if resources are critically low,"
+        "\n  null = normal operation."
     )
     return "\n".join(lines)
 
@@ -251,6 +272,10 @@ def _parse_analysis(text: str) -> dict:
         if isinstance(directive, dict):
             if directive.get("resource_bias") in _ELEMENTS:
                 result["resource_bias"] = directive["resource_bias"]
+            if directive.get("role") in {"miner", "aligner", "scrambler"}:
+                result["role"] = directive["role"]
+            if directive.get("objective") in {"expand", "defend", "economy_bootstrap"}:
+                result["objective"] = directive["objective"]
             result["analysis"] = directive.get("analysis", text[:100])
     except (json.JSONDecodeError, ValueError):
         pass
@@ -304,7 +329,7 @@ def all_programs() -> dict[str, Program]:
             parser=_parse_analysis,
             config={
                 "model": "claude-sonnet-4-20250514",
-                "max_tokens": 150,
+                "max_tokens": 200,
                 "temperature": 0.2,
                 "max_turns": 1,
             },

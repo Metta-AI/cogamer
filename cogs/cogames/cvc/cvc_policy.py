@@ -149,8 +149,15 @@ class CvCPolicyImpl(StatefulPolicyImpl[CvCAgentState]):
 
             if "resource_bias" in parsed:
                 state.resource_bias_from_llm = parsed["resource_bias"]
-                # Optionally influence mining via GameState
                 gs.resource_bias = parsed["resource_bias"]
+
+            # Apply role override from LLM
+            if "role" in parsed:
+                gs.role = parsed["role"]
+
+            # Apply objective to engine directive
+            if "objective" in parsed and hasattr(gs.engine, '_llm_objective'):
+                gs.engine._llm_objective = parsed["objective"]
 
             state.llm_latencies.append(latency_ms)
             state.llm_log.append({
@@ -159,6 +166,8 @@ class CvCPolicyImpl(StatefulPolicyImpl[CvCAgentState]):
                 "latency_ms": round(latency_ms),
                 "analysis": parsed.get("analysis", ""),
                 "resource_bias": state.resource_bias_from_llm,
+                "role_override": parsed.get("role"),
+                "objective": parsed.get("objective"),
             })
             print(
                 f"[table] a{self._agent_id} step={gs.step_index} "

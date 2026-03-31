@@ -7,11 +7,17 @@
   "tournament_best": 10.63,
   "tournament_rank": 1,
   "tournament_top": 10.63,
-  "latest_submission": "beta:v38",
-  "freeplay_submission": "beta:v39",
-  "key_fix": "Heart batch escalation removed (3→6 was draining economy), +34% self-play. v33/v35 advancing to stage-3 in tournament.",
+  "latest_submission": "beta:v43",
+  "freeplay_submission": "beta:v42",
+  "key_fix": "Enhanced LLM brain: role/objective guidance + stagnation detection",
   "approach_stats": {
     "pco": {"attempts": 4, "improvements": 1, "last_used": "20260329-000000"},
-    "design": {"attempts": 13, "improvements": 9, "last_used": "20260331-130000"}
+    "design": {"attempts": 14, "improvements": 9, "last_used": "20260331-130000"}
+  },
+  "freeplay_experiments": {
+    "v28_enemy_avoidance": {"score": 1.21, "result": "regression"},
+    "v40_no_scramblers": {"score": 1.24, "result": "regression"},
+    "v42_enhanced_llm": {"score": "pending", "result": "pending"},
+    "best_v15": {"score": 1.81, "result": "baseline_best"}
   }
 }

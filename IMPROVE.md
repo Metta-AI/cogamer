@@ -304,6 +304,18 @@ The alpha.0 agent lives at `metta-ai/cogora` (`src/cvc/cogent/player_cog/policy/
 - More aligners (6) / fewer miners (2) — economy can't sustain
 - Wider A* margin (12→20) — slower, wastes ticks
 - Emergency mining threshold 50 or 10 — hurts more than helps
+- Enemy avoidance penalty in aligner scoring — helps self-play (+31%) but HURTS freeplay (-33%)
+- Remove scramblers entirely — helps self-play (+26%) but HURTS freeplay (-31%). Scramblers needed to deny opponent junctions
+- RETREAT_MARGIN=20 — always hurts self-play (-19%). Dead end confirmed
+- Tighter aligner explore offsets (manhattan 15) — agents miss distant junctions (-35%)
+- Heart batch cap at 4 (remove 5/6 scaling) — uncertain, tested bundled with other changes
+- Self-play improvements DON'T predict freeplay improvements — the two are weakly correlated
+
+### Critical Learnings
+- **Scrambler is heart-starved**: In self-play with (4,1) budget, the scrambler has 0 hearts for most of the game because 4 aligners consume all team hearts first. The scrambler is effectively useless in self-play, but still matters in freeplay (even occasional scrambles deny opponent)
+- **Junction collapse pattern**: Peak at ~7 friendly junctions (step 500), collapse to 0-2 by step 5000 in self-play. Enemy team scrambles faster than we rebuild
+- **Early game is critical**: Most score comes from first 500-2000 steps. Late game contributes little
+- **LLM may be the structural gap**: Alpha.0's cyborg architecture with LLM stagnation detection is likely the key differentiator. Our LLM only adjusts resource_bias. Enhanced to provide role/objective guidance in v42
 
 ## Rules & Constraints
 
