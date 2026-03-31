@@ -128,6 +128,7 @@ class TargetingMixin:
                     ),
                     hub_position=hub_pos,
                     friendly_sources=network_sources,
+                    hotspot_count=self._junction_hotspot_count(state, entity.position),  # type: ignore[attr-defined]
                 ),
                 entity.position,
             ),
@@ -164,6 +165,7 @@ class TargetingMixin:
             claimed_by_other=False,
             hub_position=hub_pos,
             friendly_sources=network_sources,
+            hotspot_count=self._junction_hotspot_count(state, sticky.position),  # type: ignore[attr-defined]
         )[0]
         candidate_score = _h.aligner_target_score(
             current_position=current_pos,
@@ -178,6 +180,7 @@ class TargetingMixin:
             ),
             hub_position=hub_pos,
             friendly_sources=network_sources,
+            hotspot_count=self._junction_hotspot_count(state, candidate.position),  # type: ignore[attr-defined]
         )[0]
         if candidate.position != sticky.position and candidate_score + _TARGET_SWITCH_THRESHOLD < sticky_score:
             return candidate

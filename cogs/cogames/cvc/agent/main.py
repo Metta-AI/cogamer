@@ -77,6 +77,7 @@ class CvcEngine(
         self._claimed_target: tuple[int, int] | None = None
         self._sticky_target_position: tuple[int, int] | None = None
         self._sticky_target_kind: str | None = None
+        self._hotspots: dict[tuple[int, int], tuple[int, int]] = {}
         self._current_directive = MacroDirective()
 
     def step(self, obs: AgentObservation) -> Action:
@@ -157,6 +158,7 @@ class CvcEngine(
         self._recent_navigation.clear()
         self._clear_target_claim()
         self._clear_sticky_target()
+        self._hotspots.clear()
         self._current_directive = MacroDirective()
         self._infos = {}
 

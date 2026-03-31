@@ -61,9 +61,11 @@ class CogletAgentPolicy(CvcEngine):
         # Base budgets (tuned for 8 agents)
         if step < 10:
             return 2, 0
-        if step < 300:
+        if step < 100:
             return 5, 0
-        return 4, 1
+        if step < 1000:
+            return 4, 1
+        return 4, 2
 
     def _should_retreat(self, state: MettagridState, role: str, safe_target: KnownEntity | None) -> bool:
         if super()._should_retreat(state, role, safe_target):

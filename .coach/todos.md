@@ -1,19 +1,21 @@
 # Coach TODO
 
 ## Current Priorities
-- [ ] Wait for v19 tournament results (agent_id fix should be transformative)
-- [ ] Test with 1v1 mode (`cogames run -c 16`) going forward, not just scrimmage
-- [ ] Investigate removing scramblers for cooperative scoring (both teams' scramblers reduce total junctions)
+- [ ] Fix 0.00 score catastrophic failures (2 out of 20 freeplay matches)
+- [ ] Close the freeplay gap: beta 1.69 vs alpha.0 15.05
+- [ ] Improve junction retention: friendly count drops from 10→1 after step 1500
 
 ## Improvement Ideas
-- [ ] Remove scramblers entirely for cooperative scoring (test in 1v1 mode)
-- [ ] Map topology analysis — understand wall patterns to improve exploration
-- [ ] Dynamic role switching — let agents switch roles based on game state
-- [ ] LLM brain integration — use analyze prompt for real-time strategic adaptation
+- [ ] Investigate 0.00 score games — what causes total failure?
+- [ ] Dynamic explore radius — expand search as network grows
+- [ ] Better aligner cycling — reduce dead time between heart acquisition and junction capture
+- [ ] Study alpha.0 match artifacts for strategy insights
 - [ ] PCO evolution — run PCO epochs to evolve program table
-- [ ] Better junction discovery — agents may miss junctions behind walls
+- [ ] Network repair priority — when a chain junction is lost, prioritize recapturing it
 
 ## Dead Ends (Don't Retry)
+- [x] Teammate-aware role adaptation — all agents see same state, causes thrashing in self-play
+- [x] Economy-aware pressure budgets — no improvement over simple budgets
 - [x] Retreat threshold tuning — always trades deaths for score regression
 - [x] Heart batch target changes — 3 for aligners is the sweet spot
 - [x] Outer explore ring at manhattan 35 — sends agents too far, they die
@@ -28,22 +30,15 @@
 - [x] Wider A* margin (12→20) — slower computation wastes ticks
 - [x] Emergency mining threshold 50 or 10 — hurts high-scoring seeds more than helps low ones
 
-## Testing Notes
-- **ALWAYS test 1v1 with `cogames run -c 16 -p A -p B`** not just scrimmage
-- Scrimmage (`-c 8`) is self-play where one policy controls all agents — inflated scores
-- Previous "remove scramblers" test was scrimmage only — retest in 1v1 for cooperative scoring
-
 ## Done
-- [x] Establish baseline: 1.31 on machina_1 (seed 42)
-- [x] Remove LLM resource herding: 1.31 → 1.72
-- [x] Full ProgLet policy (GameState wraps engine): 1.76
-- [x] PCO pipeline validated (learner proposes patches)
-- [x] Session 5: tested retreat/budget/heart tuning — no improvement found
-- [x] Session 6: fixed 4-agent role allocation (0.00 → ~0.95), submitted v13
-- [x] Session 7: fixed coglet imports for tournament bundle, limited emergency mining
-- [x] Session 8: shared junction memory + wider exploration (0.95 → 1.65 avg, v16)
-- [x] Session 9: fixed role misassignment bug (1.65 → 6.18 avg, v17)
-- [x] Session 10: chain-aware junction scoring (6.18 → 8.74 avg, v18)
-- [x] Session 11: exhaustive parameter search — no improvement found, v18 is well-tuned
-- [x] Session 12: emergency mining threshold tests — no improvement found
-- [x] Session 13: CRITICAL FIX — agent_id normalization (% 8) for tournament mode (1v1 avg 18.38, v19)
+- [x] (ID) Hotspot decay + cap — prevent front-line avoidance spiral (session 37)
+- [x] (ID) Hotspot tracking for junction scramble history (weight 8.0, matches alpha.0)
+- [x] (ID) Improved scrambler budget: start at step 100, 2 scramblers after step 1000 (2.7x improvement)
+- [x] Submitted beta:v33 (tournament), beta:v32 (freeplay)
+- [x] Tournament season complete — beta:v7 is #1
+
+## Testing Notes
+- **ALWAYS test 5+ seeds** (42–46) and average
+- Self-play (`-c 8`) has high variance — scores 0.00 to 8.66
+- 1v1 (`-p A -p B`) gives more realistic scores
+- Freeplay scores settle after 20 matches
