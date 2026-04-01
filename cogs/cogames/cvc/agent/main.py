@@ -229,7 +229,7 @@ class CvcEngine(
         if self._oscillation_steps >= _OSCILLATION_UNSTICK_STEPS:
             return self._unstick_action(state, role)
 
-        if self._stalled_steps >= 8:
+        if self._stalled_steps >= 12:
             return self._unstick_action(state, role)
 
         # Emergency mining: only aligners/scramblers without gear AND hearts

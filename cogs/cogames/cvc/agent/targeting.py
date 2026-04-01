@@ -262,7 +262,7 @@ class TargetingMixin:
         return sticky
 
     def _should_force_miner_explore_reset(self, state: MettagridState) -> bool:
-        if self._stalled_steps < 8:
+        if self._stalled_steps < 12:
             return False
         if any(entity.entity_type.endswith("_extractor") for entity in state.visible_entities):
             return False

@@ -82,8 +82,8 @@ def aligner_target_score(
         elif hub_dist <= 15:
             hotspot_weight = 5.0
     hotspot_penalty = min(hotspot_count, 3) * hotspot_weight
-    # Bonus for junctions near existing friendly network (chain-building)
-    # Denser chains are harder to disrupt and hold territory longer
+    # Small bonus for junctions near existing friendly network (chain-building)
+    # Matching alpha.0's _DEFAULT_NETWORK_WEIGHT = 0.5
     network_bonus = 0.0
     if friendly_sources:
         nearby_friendly = sum(
@@ -137,18 +137,6 @@ def scramble_target_score(
     blocked_neutrals = sum(
         1 for neutral in neutral_junctions if manhattan(candidate.position, neutral.position) <= _JUNCTION_AOE_RANGE
     )
-    # Extra bonus for neutrals that are within our alignment network (actionable targets)
-    reachable_blocked = 0
-    for neutral in neutral_junctions:
-        if manhattan(candidate.position, neutral.position) > _JUNCTION_AOE_RANGE:
-            continue
-        # Check if neutral is reachable from hub or friendly junctions
-        if manhattan(hub_position, neutral.position) <= _HUB_ALIGN_DISTANCE:
-            reachable_blocked += 1
-        elif friendly_junctions and any(
-            manhattan(f.position, neutral.position) <= _JUNCTION_ALIGN_DISTANCE for f in friendly_junctions
-        ):
-            reachable_blocked += 1
     corner_pressure = min(manhattan(hub_position, candidate.position) / 8.0, 10.0)
     # Strongly prioritize enemy junctions near our friendly network (defending our score)
     threat_bonus = 0.0
@@ -158,8 +146,8 @@ def scramble_target_score(
         )
         threat_bonus = threatened * 10.0
     return (
-        distance - blocked_neutrals * 6.0 - reachable_blocked * 4.0 - corner_pressure - threat_bonus,
-        -float(blocked_neutrals + reachable_blocked),
+        distance - blocked_neutrals * 6.0 - corner_pressure - threat_bonus,
+        -float(blocked_neutrals),
     )
 
 
