@@ -73,7 +73,15 @@ def aligner_target_score(
             hub_penalty = (hub_dist - 10) * 1.5 + 2.0
         else:
             hub_penalty = hub_dist * 0.3
-    hotspot_penalty = min(hotspot_count, 3) * 8.0
+    # Reduce hotspot penalty for hub-proximal junctions (worth defending)
+    hotspot_weight = 8.0
+    if hub_position is not None:
+        hub_dist = float(manhattan(hub_position, candidate.position))
+        if hub_dist <= 10:
+            hotspot_weight = 2.0  # near hub: still recapture despite contest
+        elif hub_dist <= 15:
+            hotspot_weight = 5.0
+    hotspot_penalty = min(hotspot_count, 3) * hotspot_weight
     # Small bonus for junctions near existing friendly network (chain-building)
     # Matching alpha.0's _DEFAULT_NETWORK_WEIGHT = 0.5
     network_bonus = 0.0

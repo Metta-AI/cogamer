@@ -1,10 +1,8 @@
 # Coach TODO
 
 ## Current Priorities
-- [ ] Monitor beta:v66 freeplay results (hotspot tracking — deprioritize contested junctions)
-- [ ] Monitor beta:v64 freeplay results (1-scrambler change, still pending)
+- [ ] Monitor v76/v77 results (hotspot + network + mem800 + hub discount)
 - [ ] Update IMPROVE.md constants: JUNCTION_ALIGN_DISTANCE=15 (not 3), JUNCTION_AOE_RANGE=10 (not 4)
-- [ ] Monitor v72 freeplay (hotspot + network bonus + junction mem 800)
 - [ ] Investigate programs.py dead code (_should_retreat extra logic never invoked)
 
 ## Improvement Ideas
@@ -50,6 +48,7 @@
 - Need 7+ seeds minimum for any signal in self-play
 
 ## Done
+- [x] (ID) Hub-proximal hotspot discount — self-play +9.6%, cumulative +32.5% vs baseline, submitted v76/v77
 - [x] (ID) Junction memory 400→800 steps — self-play +8.2%, submitted v72/v73
 - [x] (ID) Network proximity bonus (alpha.0 weight 0.5 for chain-building) — self-play neutral, submitted v70/v71
 - [x] (ID) Hotspot tracking (deprioritize contested junctions, alpha.0-style) — self-play +49.5%, submitted v66/v67
