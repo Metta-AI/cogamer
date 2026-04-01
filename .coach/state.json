@@ -1,7 +1,7 @@
 {
-  "last_session": "20260401-083000",
+  "last_session": "20260401-090000",
   "best_score": 8.84,
-  "total_sessions": 59,
+  "total_sessions": 60,
   "policy_name": "beta",
   "season": "beta-teams-tiny-fixed",
   "tournament_best": 8.84,
@@ -9,16 +9,17 @@
   "tournament_top": 8.84,
   "freeplay_best": 17.02,
   "freeplay_season": "beta-cvc",
-  "latest_submission": "beta:v101",
-  "freeplay_submission": "beta:v100",
-  "key_fix": "Reverted ALL post-v84 regressions (expansion cap, network bonus, early pressure). v84 params + reachable-blocked targeting.",
+  "latest_submission": "beta:v104",
+  "freeplay_submission": "beta:v103",
+  "key_fix": "A/B testing RETREAT_MARGIN 18 vs 20 (alpha.0 uses 20). Dead end in self-play may help freeplay.",
   "approach_stats": {
     "pco": {"attempts": 4, "improvements": 1, "last_used": "20260329-000000"},
-    "design": {"attempts": 32, "improvements": 20, "last_used": "20260401-083000"}
+    "design": {"attempts": 33, "improvements": 20, "last_used": "20260401-090000"}
   },
   "freeplay_experiments": {
+    "v103_retreat_20": {"score": "pending", "result": "pending"},
+    "v102_retreat_18": {"score": "pending", "result": "pending"},
     "v100_v84_params_plus_reachable_blocked": {"score": "pending", "result": "pending"},
-    "v98_reachable_blocked_only": {"score": "pending", "result": "pending"},
     "v92_scrambler_explore": {"score": 10.75, "result": "regression"},
     "v90_network_bonus_2": {"score": 10.19, "result": "regression"},
     "v88_expansion_cap_40": {"score": 9.31, "result": "regression"},

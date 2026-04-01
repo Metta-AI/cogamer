@@ -1,9 +1,10 @@
 # Coach TODO
 
 ## Current Priorities
-- [ ] Monitor v100 freeplay (v84 params + reachable-blocked targeting)
-- [ ] Analyze why v84 is best — what makes it work in freeplay vs self-play?
-- [ ] Study alpha.0 match replays to find specific weaknesses
+- [ ] Monitor v102 freeplay (retreat 18 + reachable-blocked)
+- [ ] Monitor v103 freeplay (retreat 20 + reachable-blocked — matches alpha.0)
+- [ ] Monitor v100 freeplay (v84 params + reachable-blocked)
+- [ ] Based on results: pick best retreat margin for codebase
 - [ ] Update IMPROVE.md constants: JUNCTION_ALIGN_DISTANCE=15 (not 3), JUNCTION_AOE_RANGE=10 (not 4)
 
 ## Improvement Ideas
@@ -56,6 +57,7 @@
 - Need 7+ seeds minimum for any signal in self-play
 
 ## Done
+- [x] (ID) A/B testing RETREAT_MARGIN 18 vs 20 — v102/v103/v104
 - [x] (ID) Reverted ALL post-v84 regressions + reachable-blocked targeting — v100/v101
 - [x] (ID) Reachable-blocked scramble targeting — self-play +49.0%, freeplay pending
 - [x] (ID) Expansion bonus cap 30→40 — self-play +16.4%, submitted v88/v89
