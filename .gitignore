@@ -10,5 +10,8 @@ uv.lock
 # Memory (ephemeral, regenerated each run)
 .memory/
 
+# Improve session state (ephemeral, regenerated each run)
+.improve/
+
 # Test experiment results (ephemeral)
 .tests/
