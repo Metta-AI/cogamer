@@ -1,7 +1,7 @@
 {
   "last_session": "20260401-070000",
-  "best_score": 8.84,
-  "total_sessions": 57,
+  "best_score": 11.42,
+  "total_sessions": 58,
   "policy_name": "beta",
   "season": "beta-teams-tiny-fixed",
   "tournament_best": 8.84,
@@ -9,17 +9,17 @@
   "tournament_top": 8.84,
   "freeplay_best": 17.02,
   "freeplay_season": "beta-cvc",
-  "latest_submission": "beta:v95",
-  "freeplay_submission": "beta:v94",
-  "key_fix": "Reachable-blocked scramble targeting (+49.0% self-play). Scramblers prioritize enemy junctions blocking our network-reachable neutrals.",
+  "latest_submission": "beta:v97",
+  "freeplay_submission": "beta:v96",
+  "key_fix": "Network bonus 2.0 + early 3 aligners. Cumulative self-play +60%.",
   "approach_stats": {
     "pco": {"attempts": 4, "improvements": 1, "last_used": "20260329-000000"},
-    "design": {"attempts": 29, "improvements": 19, "last_used": "20260401-070000"}
+    "design": {"attempts": 30, "improvements": 20, "last_used": "20260401-070000"}
   },
   "freeplay_experiments": {
+    "v96_early_3_aligners": {"score": "pending", "result": "pending"},
     "v94_reachable_blocked": {"score": "pending", "result": "pending"},
-    "v92_scrambler_explore": {"score": "pending", "result": "pending"},
-    "v88_expansion_cap_40": {"score": "pending", "result": "pending"},
+    "v90_network_bonus_2": {"score": "pending", "result": "pending"},
     "best_v84": {"score": 17.02, "result": "current_best"}
   }
 }

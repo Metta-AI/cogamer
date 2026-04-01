@@ -5,34 +5,33 @@
 
 ## Status: WAITING
 
-Submitted beta:v84 (freeplay) and beta:v85 (tournament).
-
-## Tournament Update
-Matches started! Stage 1 play-ins running. Early results:
-- **beta:v67, v69, v71, v73** all scored **8.84** (best observed score)
-- **beta:v81** (3 matches running, not yet completed)
-- Older versions: v33=10.69, v17=28.36 (worse)
-- Our improved versions consistently outperform older ones
+Submitted beta:v90 (freeplay) and beta:v91 (tournament).
 
 ## Change
-Increased scramble_target_score blocked_neutrals weight from 4.0 → 6.0.
-Scramblers more strongly prioritize enemy junctions that block access to neutral territory.
+Increased aligner target network_bonus weight from 0.5 → 2.0 per nearby friendly junction (max 8.0 vs 2.0).
+Creates denser, more defensible junction chains.
 
-## Test Results (Self-Play)
+Also investigated scrambler targeting bug (missing friendly_junctions in sticky comparison) — fix caused -12.9% regression due to excessive target switching, reverted.
 
-| Seed | Previous | Scramble6 | Diff |
-|------|----------|-----------|------|
-| 42 | 1.06 | 2.20 | +1.14 |
-| 43 | 2.55 | 2.32 | -0.23 |
-| 44 | 0.92 | 2.55 | +1.63 |
-| 45 | 1.40 | 1.26 | -0.14 |
-| 46 | 1.98 | 1.56 | -0.42 |
-| 47 | 2.06 | 0.00 | -2.06 |
-| 48 | 1.73 | 1.70 | -0.03 |
-| **Avg** | **1.67** | **1.66** | **-0.02 (-0.9%)** |
+## Test Results (Self-Play, 8 seeds)
 
-Neutral change — within variance. Theoretically correct for freeplay.
+| Seed | Baseline | Network 2.0 | Diff |
+|------|----------|-------------|------|
+| 42 | 0.00 | 12.26 | +12.26 |
+| 43 | 8.76 | 7.63 | -1.13 |
+| 44 | 6.18 | 9.30 | +3.12 |
+| 45 | 9.78 | 7.82 | -1.96 |
+| 46 | 6.42 | 9.87 | +3.45 |
+| 47 | 9.97 | 11.31 | +1.34 |
+| 48 | 5.33 | 7.68 | +2.35 |
+| 49 | 10.63 | 20.22 | +9.59 |
+| **Avg** | **7.13** | **10.76** | **+50.9%** |
 
 ## Submissions
-- Freeplay: beta:v84 (beta-cvc)
-- Tournament: beta:v85 (beta-teams-tiny-fixed)
+- Freeplay: beta:v90 (beta-cvc)
+- Tournament: beta:v91 (beta-teams-tiny-fixed)
+
+## Notes
+- Seed 42 was 0.00 baseline (all agents HP=0 by step 500) — network bonus fixed this completely
+- Remote had concurrent changes: expansion cap 30→40, scramble weight 4→6, miner stall 12→8
+- Our change was rebased on top of those

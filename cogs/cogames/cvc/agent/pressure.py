@@ -137,7 +137,7 @@ class PressureMixin:
         min_res = _h.team_min_resource(state)
         can_hearts = _h.team_can_refill_hearts(state)
         if step < 30:
-            pressure_budget = 2
+            pressure_budget = 3
         elif step < 3000:
             pressure_budget = 5
             if min_res < 1 and not can_hearts:
