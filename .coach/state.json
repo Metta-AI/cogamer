@@ -1,7 +1,7 @@
 {
-  "last_session": "20260401-044500",
+  "last_session": "20260401-053000",
   "best_score": 8.84,
-  "total_sessions": 54,
+  "total_sessions": 55,
   "policy_name": "beta",
   "season": "beta-teams-tiny-fixed",
   "tournament_best": 8.84,
@@ -9,16 +9,16 @@
   "tournament_top": 8.84,
   "freeplay_best": 1.81,
   "freeplay_season": "beta-cvc",
-  "latest_submission": "beta:v87",
-  "freeplay_submission": "beta:v86",
-  "key_fix": "Faster unstick (12→8 steps). Avg neutral but variance halved, min improved. No 0.00 seeds.",
+  "latest_submission": "beta:v89",
+  "freeplay_submission": "beta:v88",
+  "key_fix": "Expansion bonus cap 30→40. Self-play +16.4%. Cumulative improvement strong.",
   "approach_stats": {
     "pco": {"attempts": 4, "improvements": 1, "last_used": "20260329-000000"},
-    "design": {"attempts": 26, "improvements": 16, "last_used": "20260401-044500"}
+    "design": {"attempts": 27, "improvements": 17, "last_used": "20260401-053000"}
   },
   "freeplay_experiments": {
-    "v84_scramble_weight_6": {"score": "pending", "result": "pending"},
     "v86_unstick_8": {"score": "pending", "result": "pending"},
+    "v88_expansion_cap_40": {"score": "pending", "result": "pending"},
     "best_v15": {"score": 1.81, "result": "baseline_best"}
   }
 }
