@@ -1,82 +1,70 @@
 ---
 name: improve
-description: Run one improvement iteration. Chooses between PCO and IntelligentDesign based on recent effectiveness, runs the chosen approach, falls back to the other if it fails. Use when asked to "improve the agent", "run an improvement", or "improve".
+description: Run one improvement iteration. Analyzes code, identifies a specific improvement, implements it, tests across seeds, and submits if improved. Use when asked to "improve", "run an improvement", or "review the code".
 ---
 
-# Improvement Iteration
+# Improve
 
-Orchestrates improvement by choosing between `/proximal-cogent-optimize` and `/improve.design` based on effectiveness.
+Read the code, find one improvement, implement it, test, submit.
 
-Reads `docs/*.md` for domain context and `.cogent/IDENTITY.md` for the cogent's identity and personality.
+Reads `docs/architecture.md` for architecture and alpha.0 reference, `docs/strategy.md` for strategies, `docs/cogames.md` for CLI commands, `.cogent/IDENTITY.md` for identity.
 
-## Step 0: Check .cogent/IDENTITY.md
+## Step 0: Check Identity
 
-Read `.cogent/IDENTITY.md`. If it still contains "The Unknown Cogent" or the `/initialize` placeholder, run `/initialize` first — the cogent needs an identity before it can improve.
+Read `.cogent/IDENTITY.md`. If it still contains "The Unknown Cogent", run `/initialize` first.
 
 ## Step 1: Initialize Session State
 
 Create `.cogent/state.json` and `.cogent/todos.md` if they don't exist yet.
 
-## Step 2: Choose Approach
+## Step 2: Eval Baseline
 
-Read `.cogent/state.json` (check `approach_stats`) and `.cogent/todos.md`. Pick the approach most likely to succeed this session.
+Run eval on seed 42 to establish baseline score (see `docs/cogames.md` for commands).
 
-### Approach Stats (tracked in state.json)
+## Step 3: Analyze
 
-```json
-{
-  "approach_stats": {
-    "pco": {"attempts": 5, "improvements": 2, "last_used": "20260330-..."},
-    "design": {"attempts": 8, "improvements": 5, "last_used": "20260331-..."}
-  }
-}
-```
+Pick ONE focus area based on `docs/strategy.md`, `.cogent/todos.md`, and what hasn't been tried:
 
-### Decision Rules
+1. **Code review**: Read engine files (`agent/main.py`, `roles.py`, `targeting.py`, `pressure.py`). Look for bugs, inefficiencies, or gaps vs the alpha.0 reference in `docs/architecture.md`
+2. **Prompt review**: Read `_build_analysis_prompt()` and `_parse_analysis()` in `programs.py`. Is the LLM seeing the right info? Could it return more than just `resource_bias`? Could it detect stagnation like alpha.0 does?
+3. **Scoring review**: Read `helpers/targeting.py`. Are `aligner_target_score` and `scramble_target_score` well-tuned? Compare weights vs alpha.0
+4. **Parameter comparison**: Compare constants in `helpers/types.py` and `pressure.py` against alpha.0 (e.g. `RETREAT_MARGIN` 15 vs 20, enemy AOE radius 4 vs 20)
+5. **Architecture improvement**: Read `cvc_policy.py`. Is the LLM feedback loop working? Could the `analyze` program influence more than mining? Could it adjust role allocation or targeting?
 
-1. **If one approach has a clearly better hit rate**, prefer it (but still use the other ~30% of the time to keep exploring)
-2. **If PCO hasn't been run in 3+ sessions**, run PCO (fresh experience reveals new signals)
-3. **If there's a specific bug/TODO in todos.md**, prefer IntelligentDesign (targeted fixes)
-4. **If the alpha.0 reference in `docs/architecture.md` has an unaddressed gap**, prefer IntelligentDesign
-5. **If both are similar**, alternate
-6. **If no stats yet**, start with IntelligentDesign (the agent can see obvious wins first)
+## Step 4: Implement
 
-Log the chosen approach in the session's `plan.md`.
+Make a focused, isolated change. Write the code directly.
 
-## Step 3: Run Chosen Approach
+- **Prompt improvements**: modify `_build_analysis_prompt()` or `_parse_analysis()` in `programs.py`
+- **Code improvements**: modify the relevant engine file in `agent/`
+- **Parameter changes**: modify `helpers/types.py` or the relevant mixin
+- **New programs**: add to `programs.py` and wire into `all_programs()`
 
-Run `/proximal-cogent-optimize` or `/improve.design`.
+## Step 5: Test Across Seeds
 
-## Step 4: Handle Failure
+Run eval across 5+ seeds. If average score drops vs baseline, **revert**.
 
-If the chosen approach didn't produce an improvement (no accepted patch, or scores regressed):
+## Step 6: Submit if Improved
 
-1. Log the failure
-2. If time/context permits, try the **other** approach as a fallback
-3. If both fail, log it and move on — not every session produces a win
+If scores improved, automatically submit to freeplay without asking. Read the cogent name from `.cogent/IDENTITY.md` (the `# heading`) and use it as the policy name. See `docs/cogames.md` for the upload command.
 
-## Step 5: Update Approach Stats
+Do NOT ask the user for confirmation — submit automatically. Log the submission version.
 
-After the session, update `approach_stats` in `.cogent/state.json`:
+## Step 7: Update State
 
-```python
-stats = state["approach_stats"][approach]
-stats["attempts"] += 1
-if improved:
-    stats["improvements"] += 1
-stats["last_used"] = session_timestamp
-```
+Update `.cogent/state.json` and `.cogent/todos.md` with the result.
 
-Also update `.cogent/todos.md` with the approach tag:
-```
-- [x] (ID) Fixed chain-aware scoring in helpers/targeting.py — +41% avg
-- [x] (PCO) Learner patched should_retreat with extra HP caution
-- [x] (ID) Improved LLM prompt to return role suggestions
-```
+## Output
+
+Report back with:
+- `improved`: whether scores improved
+- `score_before`: baseline average
+- `score_after`: post-change average (or null if reverted)
+- `focus`: which area was analyzed
+- `description`: what changed and why
 
 ## Principles
 
-- **One change per session.** Don't stack changes from both approaches.
-- **Track what works.** The stats drive future decisions.
-- **Alternate when tied.** Don't get stuck in one mode.
-- **Fallback on failure.** If PCO produces nothing, try design (and vice versa).
+- **One change per session.** Isolate what works vs what breaks.
+- **Track what works.** Update state and todos after every session.
+- **Revert on regression.** If average score drops, revert immediately.
