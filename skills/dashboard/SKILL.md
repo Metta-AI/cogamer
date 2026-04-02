@@ -1,5 +1,5 @@
 ---
-name: improve.dashboard
+name: dashboard
 description: Generate an HTML training dashboard from .cogent/ state showing experiments, scores, learnings, TODOs. Pulls live tournament status. Opens in browser. Use for "dashboard", "training status", "show progress".
 ---
 
