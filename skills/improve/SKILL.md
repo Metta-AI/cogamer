@@ -11,7 +11,7 @@ Reads `docs/*.md` for domain context and `.cogent/IDENTITY.md` for the cogent's 
 
 ## Step 0: Check .cogent/IDENTITY.md
 
-Read `.cogent/IDENTITY.md`. If it still contains "The Unknown Cogent" or the `/cogamer.configure` placeholder, run `/cogamer.configure` first — the cogent needs an identity before it can improve.
+Read `.cogent/IDENTITY.md`. If it still contains "The Unknown Cogent" or the `/initialize` placeholder, run `/initialize` first — the cogent needs an identity before it can improve.
 
 ## Step 1: Initialize Session State
 
