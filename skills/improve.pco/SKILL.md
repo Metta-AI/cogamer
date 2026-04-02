@@ -7,13 +7,13 @@ description: PCO improvement iteration. Plays a game, collects experience, runs 
 
 Run one PCO (Program Conditioned Optimization) cycle: play → collect experience → learner proposes patches → test → submit.
 
-Reads eval/submit commands from `IMPROVE.md`.
+Reads eval/submit commands from `docs/`.
 
 ## Steps
 
 ### 1. Eval Baseline
 
-Run eval from `IMPROVE.md` on seed 42 to establish baseline score.
+Run eval from `docs/` on seed 42 to establish baseline score.
 
 ### 2. Play a Game & Collect Experience
 
@@ -48,7 +48,7 @@ Log signals (resource, junction, survival magnitudes) and proposed patches.
 If `result["accepted"]` and patch looks reasonable:
 - Fix any invalid API calls (the learner sometimes invents methods)
 - Apply to `programs.py` — only modify the specific function
-- **Valid GameState API**: see `IMPROVE.md`
+- **Valid GameState API**: see `docs/`
 
 If not accepted, log why and report back to `improve` (it may switch to design).
 
@@ -58,7 +58,7 @@ Run eval across 5+ seeds. If average score drops vs baseline, **revert the patch
 
 ### 6. Submit if Improved
 
-Use the submit command from `IMPROVE.md`. Log the submission version.
+Use the submit command from `docs/`. Log the submission version.
 
 ## Output
 

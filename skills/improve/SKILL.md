@@ -7,7 +7,7 @@ description: Run one improvement iteration. Chooses between PCO and IntelligentD
 
 Orchestrates improvement by choosing between `/improve.pco` and `/improve.design` based on effectiveness.
 
-Reads `IMPROVE.md` for domain context and `.cogent/IDENTITY.md` for the cogent's identity and personality.
+Reads `docs/` for domain context and `.cogent/IDENTITY.md` for the cogent's identity and personality.
 
 ## Step 0: Check .cogent/IDENTITY.md
 
@@ -37,7 +37,7 @@ Read `.cogent/state.json` (check `approach_stats`) and `.cogent/todos.md`. Pick 
 1. **If one approach has a clearly better hit rate**, prefer it (but still use the other ~30% of the time to keep exploring)
 2. **If PCO hasn't been run in 3+ sessions**, run PCO (fresh experience reveals new signals)
 3. **If there's a specific bug/TODO in todos.md**, prefer IntelligentDesign (targeted fixes)
-4. **If the alpha.0 reference in IMPROVE.md has an unaddressed gap**, prefer IntelligentDesign
+4. **If the alpha.0 reference in docs/ has an unaddressed gap**, prefer IntelligentDesign
 5. **If both are similar**, alternate
 6. **If no stats yet**, start with IntelligentDesign (the agent can see obvious wins first)
 

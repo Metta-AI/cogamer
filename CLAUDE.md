@@ -59,14 +59,14 @@ Improve (Claude Code) → PlayerCoglet (GitLet) → PolicyCoglet (ProgLet + LLM 
 PYTHONPATH=src/cogamer python -m pytest tests/ -v
 ```
 
-See [IMPROVE.md](IMPROVE.md) for CvC agent setup, eval, and submit commands.
+See [IMPROVE.md](IMPROVE.md) for CvC agent coaching guide index.
 
 ### Docs
 
 - [AGENTS.md](AGENTS.md) — Component reference for AI agents working with this codebase
 - [README.md](README.md) — Project overview and quickstart
-- [docs/coglet.md](docs/coglet.md) — Architecture design (COG/LET primitives)
-- [docs/framework.md](docs/framework.md) — Framework implementation reference
-- [docs/improvements.md](docs/improvements.md) — Architectural improvements and status
-- [docs/tournament.md](docs/tournament.md) — Tournament system design
-- [docs/cvc-player.md](docs/cvc-player.md) — CvC player system (Improve, Player, Policy)
+- [docs/rules.md](docs/rules.md) — Game rules, constants, team coordination
+- [docs/architecture.md](docs/architecture.md) — Policy architecture, program table, PCO, alpha.0 reference
+- [docs/strategy.md](docs/strategy.md) — What works, what to try, dead ends, learnings
+- [docs/cogames.md](docs/cogames.md) — CLI setup, running, uploading, monitoring
+- [docs/tools.md](docs/tools.md) — Development rules & constraints

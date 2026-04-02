@@ -7,19 +7,19 @@ description: IntelligentDesign improvement iteration. Directly analyzes code and
 
 Directly read the code and prompts, identify a specific improvement, implement it, test, submit.
 
-Reads architecture and alpha.0 reference from `IMPROVE.md`.
+Reads architecture and alpha.0 reference from `docs/`.
 
 ## Steps
 
 ### 1. Eval Baseline
 
-Run eval from `IMPROVE.md` on seed 42 to establish baseline score.
+Run eval from `docs/` on seed 42 to establish baseline score.
 
 ### 2. Analyze
 
-Pick ONE focus area based on `IMPROVE.md` strategies, `.cogent/todos.md`, and what hasn't been tried:
+Pick ONE focus area based on `docs/` strategies, `.cogent/todos.md`, and what hasn't been tried:
 
-1. **Code review**: Read engine files (`agent/main.py`, `roles.py`, `targeting.py`, `pressure.py`). Look for bugs, inefficiencies, or gaps vs the alpha.0 reference in `IMPROVE.md`
+1. **Code review**: Read engine files (`agent/main.py`, `roles.py`, `targeting.py`, `pressure.py`). Look for bugs, inefficiencies, or gaps vs the alpha.0 reference in `docs/`
 2. **Prompt review**: Read `_build_analysis_prompt()` and `_parse_analysis()` in `programs.py`. Is the LLM seeing the right info? Could it return more than just `resource_bias`? Could it detect stagnation like alpha.0 does?
 3. **Scoring review**: Read `helpers/targeting.py`. Are `aligner_target_score` and `scramble_target_score` well-tuned? Compare weights vs alpha.0
 4. **Parameter comparison**: Compare constants in `helpers/types.py` and `pressure.py` against alpha.0 (e.g. `RETREAT_MARGIN` 15 vs 20, enemy AOE radius 4 vs 20)
