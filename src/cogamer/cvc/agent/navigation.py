@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import heapq
 from collections import deque
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -16,11 +15,15 @@ from cvc.agent import (
     absolute_position,
     direction_from_step,
     explore_offsets,
-    greedy_step,
     inventory_signature,
     manhattan,
     role_vibe,
     unstick_directions,
+)
+from cvc.agent.pathfinding import (
+    NavigationObservation,
+    astar_next_step,
+    detect_extractor_oscillation,
 )
 from mettagrid.simulator import Action
 
@@ -28,22 +31,12 @@ if TYPE_CHECKING:
     from cvc.agent.world_model import WorldModel
 
 _TEMP_BLOCK_STEPS = 10
-_DEFAULT_BOUND_MARGIN = 12
-_OSCILLATION_HISTORY_STEPS = 6
 
 
 @dataclass(slots=True)
 class MoveAttempt:
     direction: str
     stationary_use: bool
-
-
-@dataclass(slots=True)
-class NavigationObservation:
-    position: tuple[int, int]
-    subtask: str
-    target_kind: str
-    target_position: tuple[int, int] | None
 
 
 class NavigationMixin:
@@ -111,50 +104,9 @@ class NavigationMixin:
         return self._action(self._fallback_action, vibe=vibe), summary
 
     def _next_step(self, current: tuple[int, int], target: tuple[int, int]) -> tuple[int, int] | None:
-        if current == target:
-            return None
-
         blocked = self._world_model.occupied_cells(exclude={target})
         blocked.update(cell for cell, until_step in self._temp_blocks.items() if until_step >= self._step_index)
-        if manhattan(current, target) <= 1:
-            return target
-
-        min_x = min(current[0], target[0]) - _DEFAULT_BOUND_MARGIN
-        max_x = max(current[0], target[0]) + _DEFAULT_BOUND_MARGIN
-        min_y = min(current[1], target[1]) - _DEFAULT_BOUND_MARGIN
-        max_y = max(current[1], target[1]) + _DEFAULT_BOUND_MARGIN
-
-        frontier: list[tuple[int, int, tuple[int, int]]] = [(0, 0, current)]
-        came_from: dict[tuple[int, int], tuple[int, int]] = {}
-        best_cost = {current: 0}
-
-        while frontier:
-            _, cost, node = heapq.heappop(frontier)
-            if node == target:
-                break
-            if cost > best_cost.get(node, cost):
-                continue
-            for dx, dy in _MOVE_DELTAS.values():
-                nxt = (node[0] + dx, node[1] + dy)
-                if nxt in blocked:
-                    continue
-                if nxt[0] < min_x or nxt[0] > max_x or nxt[1] < min_y or nxt[1] > max_y:
-                    continue
-                next_cost = cost + 1
-                if next_cost >= best_cost.get(nxt, 1 << 30):
-                    continue
-                best_cost[nxt] = next_cost
-                came_from[nxt] = node
-                priority = next_cost + manhattan(nxt, target)
-                heapq.heappush(frontier, (priority, next_cost, nxt))
-
-        if target not in came_from:
-            return greedy_step(current, target, blocked)
-
-        step = target
-        while came_from[step] != current:
-            step = came_from[step]
-        return step
+        return astar_next_step(current, target, blocked)
 
     def _update_temp_blocks(self, current_pos: tuple[int, int]) -> None:
         self._temp_blocks = {
@@ -227,35 +179,4 @@ class NavigationMixin:
                 target_position=self._current_target_position,
             )
         )
-        self._oscillation_steps = self._extractor_oscillation_length()
-
-    def _extractor_oscillation_length(self) -> int:
-        if len(self._recent_navigation) < 2:
-            return 0
-        observations = list(self._recent_navigation)
-        max_size = min(len(observations), _OSCILLATION_HISTORY_STEPS)
-        for size in range(max_size, 1, -1):
-            window = observations[-size:]
-            first = window[0]
-            second = window[1]
-            if first.position == second.position:
-                continue
-            if not first.subtask.startswith("mine_"):
-                continue
-            if not first.target_kind.endswith("_extractor"):
-                continue
-            if first.target_position is None:
-                continue
-            if any(
-                item.subtask != first.subtask
-                or item.target_kind != first.target_kind
-                or item.target_position != first.target_position
-                for item in window
-            ):
-                continue
-            if all(
-                item.position == (first.position if index % 2 == 0 else second.position)
-                for index, item in enumerate(window)
-            ):
-                return size
-        return 0
+        self._oscillation_steps = detect_extractor_oscillation(list(self._recent_navigation))

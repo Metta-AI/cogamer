@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from mettagrid_sdk.sdk import MettagridState
 
 from cvc.agent import (
     KnownEntity,
-    _JUNCTION_ALIGN_DISTANCE,
     _JUNCTION_AOE_RANGE,
     absolute_position,
     deposit_threshold,
@@ -22,24 +20,17 @@ from cvc.agent import (
     team_can_refill_hearts,
     team_id,
     team_min_resource,
-    within_alignment_network,
+)
+from cvc.agent.budgets import (
+    PressureMetrics,
+    assign_role,
+    compute_pressure_budgets,
+    compute_pressure_metrics,
+    compute_retreat_margin,
 )
 
 if TYPE_CHECKING:
     from cvc.agent.world_model import WorldModel
-
-_RETREAT_MARGIN = 15
-_ECONOMY_BOOTSTRAP_ALIGNER_BUDGET = 2
-# Extended to cover all IDs for any team size. First entries preserved for 8-agent.
-_ALIGNER_PRIORITY = (4, 5, 6, 7, 3, 2, 1, 0)
-_SCRAMBLER_PRIORITY = (7, 6, 3, 2, 1, 0)
-
-
-@dataclass(slots=True)
-class PressureMetrics:
-    frontier_neutral_junctions: int
-    best_frontier_coverage: int
-    best_enemy_scramble_block: int
 
 
 class PressureMixin:
@@ -50,19 +41,7 @@ class PressureMixin:
 
     def _desired_role(self, state: MettagridState, *, objective: str | None = None) -> str:
         aligner_budget, scrambler_budget = self._pressure_budgets(state, objective=objective)
-        scrambler_ids = set(_SCRAMBLER_PRIORITY[:scrambler_budget])
-        aligner_ids = []
-        for agent_id in _ALIGNER_PRIORITY:
-            if agent_id in scrambler_ids:
-                continue
-            if len(aligner_ids) == aligner_budget:
-                break
-            aligner_ids.append(agent_id)
-        if self._role_id in scrambler_ids:
-            return "scrambler"
-        if self._role_id in aligner_ids:
-            return "aligner"
-        return "miner"
+        return assign_role(self._role_id, aligner_budget, scrambler_budget)
 
     def _macro_snapshot(self, state: MettagridState, role: str) -> dict[str, int | str | bool]:
         safe_target = self._nearest_friendly_depot(state)  # type: ignore[attr-defined]
@@ -105,74 +84,28 @@ class PressureMixin:
     def _pressure_metrics(self, state: MettagridState) -> PressureMetrics:
         team = team_id(state)
         hub = self._nearest_hub(state)  # type: ignore[attr-defined]
-        friendly_sources = []
+        friendly_sources: list[KnownEntity] = []
         if hub is not None:
             friendly_sources.append(hub)
         friendly_sources.extend(self._known_junctions(state, predicate=lambda entity: entity.owner == team))  # type: ignore[attr-defined]
         neutral_junctions = self._known_junctions(state, predicate=lambda entity: entity.owner in {None, "neutral"})  # type: ignore[attr-defined]
-        frontier_junctions = [
-            entity for entity in neutral_junctions if within_alignment_network(entity.position, friendly_sources)
-        ]
-        unreachable_junctions = [entity for entity in neutral_junctions if entity not in frontier_junctions]
-        best_frontier_coverage = max(
-            (
-                sum(
-                    1
-                    for neutral in unreachable_junctions
-                    if manhattan(candidate.position, neutral.position) <= _JUNCTION_ALIGN_DISTANCE
-                )
-                for candidate in frontier_junctions
-            ),
-            default=0,
-        )
         enemy_junctions = self._known_junctions(  # type: ignore[attr-defined]
             state,
             predicate=lambda entity: entity.owner not in {None, "neutral", team},
         )
-        best_enemy_scramble_block = max(
-            (
-                sum(
-                    1
-                    for neutral in neutral_junctions
-                    if manhattan(enemy.position, neutral.position) <= _JUNCTION_AOE_RANGE
-                )
-                for enemy in enemy_junctions
-            ),
-            default=0,
-        )
-        return PressureMetrics(
-            frontier_neutral_junctions=len(frontier_junctions),
-            best_frontier_coverage=best_frontier_coverage,
-            best_enemy_scramble_block=best_enemy_scramble_block,
+        return compute_pressure_metrics(
+            friendly_sources=friendly_sources,
+            neutral_junctions=neutral_junctions,
+            enemy_junctions=enemy_junctions,
         )
 
     def _pressure_budgets(self, state: MettagridState, *, objective: str | None = None) -> tuple[int, int]:
-        step = state.step or self._step_index
-
-        min_res = team_min_resource(state)
-        can_hearts = team_can_refill_hearts(state)
-        if step < 30:
-            pressure_budget = 2
-        elif step < 3000:
-            pressure_budget = 5
-            if min_res < 1 and not can_hearts:
-                pressure_budget = 2
-            elif min_res < 3:
-                pressure_budget = 4
-        else:
-            pressure_budget = 6
-            if min_res < 1 and not can_hearts:
-                pressure_budget = 3
-
-        scrambler_budget = 0
-        if step >= 100:
-            scrambler_budget = 1
-        aligner_budget = max(pressure_budget - scrambler_budget, 0)
-        if objective == "resource_coverage":
-            return 0, 0
-        if objective == "economy_bootstrap":
-            return min(aligner_budget, _ECONOMY_BOOTSTRAP_ALIGNER_BUDGET), 0
-        return aligner_budget, scrambler_budget
+        return compute_pressure_budgets(
+            step=state.step or self._step_index,
+            min_resource=team_min_resource(state),
+            can_refill_hearts=team_can_refill_hearts(state),
+            objective=objective,
+        )
 
     def _in_enemy_aoe(self, state: MettagridState, position: tuple[int, int], *, team_id: str) -> bool:
         enemies = self._known_junctions(  # type: ignore[attr-defined]
@@ -201,20 +134,19 @@ class PressureMixin:
             return hp <= retreat_threshold(state, role)
 
         safe_steps = max(0, manhattan(absolute_position(state), safe_target.position) - _JUNCTION_AOE_RANGE)
-        margin = _RETREAT_MARGIN
         current_pos = absolute_position(state)
         team = team_id(state)
-        if self._in_enemy_aoe(state, current_pos, team_id=team):
-            margin += 10
-        elif self._near_enemy_territory(state, current_pos, team_id=team):
-            margin += 5
-        margin += int(state.self_state.inventory.get("heart", 0)) * 5
-        margin += min(resource_total(state), 12) // 2
-        if not has_role_gear(state, role):
-            margin += 10
-        if (state.step or 0) >= 2_500:
-            margin += 10 if role in {"aligner", "scrambler"} else 5
-        return hp <= safe_steps + margin
+        return compute_retreat_margin(
+            hp=hp,
+            safe_steps=safe_steps,
+            in_enemy_aoe=self._in_enemy_aoe(state, current_pos, team_id=team),
+            near_enemy_territory=self._near_enemy_territory(state, current_pos, team_id=team),
+            heart_count=int(state.self_state.inventory.get("heart", 0)),
+            resource_cargo=resource_total(state),
+            has_gear=has_role_gear(state, role),
+            late_game=(state.step or 0) >= 2_500,
+            role=role,
+        )
 
     def _should_deposit_resources(self, state: MettagridState) -> bool:
         cargo = resource_total(state)
