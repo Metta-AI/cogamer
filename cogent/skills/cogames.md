@@ -19,9 +19,9 @@ Install the cogames CLI, authenticate, and verify everything works.
    ```bash
    uv run cogames auth status
    ```
-   If not authenticated, get the token from secrets and run:
+   If not authenticated, read the `SOFTMAX_TOKEN` secret and run:
    ```bash
-   uv run cogames auth set-token <token>
+   uv run cogames auth set-token $SOFTMAX_TOKEN
    ```
 
 4. **Validate auth** — run a lightweight command that requires auth:
