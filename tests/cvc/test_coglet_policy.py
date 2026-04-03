@@ -33,7 +33,7 @@ class TestSharedResources:
         assert "heart" not in result
 
     def test_missing_element_in_shared_inventory_defaults_to_zero(self, make_state):
-        from mettagrid_sdk.sdk.state import TeamSummary
+        from mettagrid.sdk.agent import TeamSummary
 
         # Build a team_summary with a shared_inventory that omits some elements
         ts = TeamSummary(

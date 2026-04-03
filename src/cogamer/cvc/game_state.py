@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from mettagrid_sdk.games.cogsguard import CogsguardSemanticSurface
-from mettagrid_sdk.sdk import MacroDirective, MettagridState
+from cogames.sdk.cogsguard import CogsguardSemanticSurface
+from mettagrid.sdk.agent import MacroDirective, MettagridState
 
 from cvc.agent import (
     KnownEntity,

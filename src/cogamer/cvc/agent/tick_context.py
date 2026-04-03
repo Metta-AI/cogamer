@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from mettagrid_sdk.sdk import MettagridState
+from mettagrid.sdk.agent import MettagridState
 
 from cvc.agent.geometry import manhattan
 from cvc.agent.resources import absolute_position, resource_total, team_id

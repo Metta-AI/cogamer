@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from mettagrid_sdk.sdk import MettagridState, SemanticEntity
+from mettagrid.sdk.agent import MettagridState, SemanticEntity
 
 from cvc.agent import KnownEntity, attr_int, attr_str, manhattan
 

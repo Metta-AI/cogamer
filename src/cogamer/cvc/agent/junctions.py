@@ -5,15 +5,23 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from mettagrid_sdk.games.cogsguard import COGSGUARD_BOOTSTRAP_HUB_OFFSETS
-from mettagrid_sdk.sdk import MettagridState
+from mettagrid.sdk.agent import MettagridState
 
 from cvc.agent import KnownEntity, absolute_position, manhattan, team_id
 
 if TYPE_CHECKING:
     from cvc.agent.world_model import WorldModel
 
-_HUB_OFFSETS = COGSGUARD_BOOTSTRAP_HUB_OFFSETS
+_HUB_OFFSETS = {
+    0: (0, 3),
+    1: (0, 2),
+    2: (3, 0),
+    3: (2, 0),
+    4: (-2, 0),
+    5: (-3, 0),
+    6: (0, -2),
+    7: (0, -3),
+}
 _JUNCTION_MEMORY_STEPS = 800
 
 

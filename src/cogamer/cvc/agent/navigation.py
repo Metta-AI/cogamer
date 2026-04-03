@@ -6,7 +6,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from mettagrid_sdk.sdk import MettagridState
+from mettagrid.sdk.agent import MettagridState
 
 from cvc.agent import (
     _ELEMENTS,

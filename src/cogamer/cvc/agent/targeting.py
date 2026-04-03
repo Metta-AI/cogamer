@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from mettagrid_sdk.sdk import MacroDirective, MettagridState
+from mettagrid.sdk.agent import MacroDirective, MettagridState
 
 from cvc.agent import (
     _TARGET_CLAIM_STEPS,

@@ -15,7 +15,7 @@ class TestTeammateAlignerPositions:
         assert teammate_aligner_positions(state) == []
 
     def test_no_aligners(self, make_state):
-        from mettagrid_sdk.sdk.state import GridPosition, TeamMemberSummary
+        from mettagrid.sdk.agent import GridPosition, TeamMemberSummary
 
         members = [
             TeamMemberSummary(entity_id="a1", role="miner", position=GridPosition(x=10, y=10), inventory={}),
@@ -25,7 +25,7 @@ class TestTeammateAlignerPositions:
         assert teammate_aligner_positions(state) == []
 
     def test_returns_aligner_positions(self, make_state):
-        from mettagrid_sdk.sdk.state import GridPosition, TeamMemberSummary
+        from mettagrid.sdk.agent import GridPosition, TeamMemberSummary
 
         members = [
             TeamMemberSummary(entity_id="a1", role="aligner", position=GridPosition(x=10, y=10), inventory={}),
@@ -39,7 +39,7 @@ class TestTeammateAlignerPositions:
         assert len(positions) == 2
 
     def test_excludes_self(self, make_state):
-        from mettagrid_sdk.sdk.state import GridPosition, TeamMemberSummary
+        from mettagrid.sdk.agent import GridPosition, TeamMemberSummary
 
         members = [
             TeamMemberSummary(entity_id="agent_0", role="aligner", position=GridPosition(x=10, y=10), inventory={}),

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mettagrid_sdk.sdk import MettagridState, SemanticEntity
+from mettagrid.sdk.agent import MettagridState, SemanticEntity
 
 from cvc.agent.geometry import manhattan
 from cvc.agent.types import (

@@ -49,7 +49,7 @@ Upload a policy to a season. Use the cogent name from `cogent/IDENTITY.md` as th
 cd src/cogamer && PYTHONPATH=. cogames upload \
   -p class=cvc.cogamer_policy.CvCPolicy \
   -n <cogent-name> \
-  -f cvc -f mettagrid_sdk -f setup_policy.py \
+  -f cvc -f setup_policy.py \
   --setup-script setup_policy.py \
   --season <season> \
   --skip-validation

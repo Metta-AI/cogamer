@@ -194,7 +194,7 @@ ANTHROPIC_API_KEY= cogames play -m machina_1 -p class=cvc.cogamer_policy.CvCPoli
 
 # Upload to tournament
 cogames upload -p class=cvc.cogamer_policy.CvCPolicy -n coglet-v0 \
-  -f cvc -f mettagrid_sdk -f setup_policy.py \
+  -f cvc -f setup_policy.py \
   --setup-script setup_policy.py --season beta-cvc \
   --secret-env "COGORA_ANTHROPIC_KEY=..."
 

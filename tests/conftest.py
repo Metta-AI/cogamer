@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import pytest
-from mettagrid_sdk.sdk import MettagridState
-from mettagrid_sdk.sdk.state import (
+from mettagrid.sdk.agent import (
     GridPosition,
-    KnownWorldState,
+    MettagridState,
     SelfState,
     SemanticEntity,
     TeamMemberSummary,
     TeamSummary,
 )
+from mettagrid.sdk.agent.state import KnownWorldState
 
 from cvc.agent.types import KnownEntity
 

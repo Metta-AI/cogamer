@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from mettagrid_sdk.sdk import MettagridState
+from mettagrid.sdk.agent import MettagridState
 
 from cvc.agent import (
     absolute_position,

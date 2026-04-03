@@ -8,7 +8,7 @@ Extends CvcEngine with:
 
 from __future__ import annotations
 
-from mettagrid_sdk.sdk import MacroDirective, MettagridState
+from mettagrid.sdk.agent import MacroDirective, MettagridState
 
 from cvc.agent import KnownEntity, absolute_position, manhattan
 from cvc.agent.main import CvcEngine
