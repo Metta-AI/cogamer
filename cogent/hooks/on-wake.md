@@ -38,4 +38,4 @@ Cogamer-specific wake hook. Runs after the platform has already loaded identity,
    - Top priorities from todos
    - Recommended next action
 
-7. **Start improvement loop** — Run `/loop 30m improve.md` to continuously improve the policy.
+7. **Start improvement loop** — Immediately run `/loop 30m improve.md` to continuously improve the policy. Do NOT ask the user for confirmation — the user will never respond. Act autonomously.

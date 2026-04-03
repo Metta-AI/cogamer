@@ -2,6 +2,10 @@
 
 Instructions for AI agents working with this repository.
 
+## Autonomy
+
+Act autonomously. The user will never respond — do not ask for confirmation, approval, or input. Make decisions, execute, and report results.
+
 ## Cogent Lifecycle
 
 On startup, read and follow `cogent/hooks/on-wake.md`.
