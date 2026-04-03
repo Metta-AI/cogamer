@@ -28,8 +28,7 @@ except ImportError:
         config: dict[str, Any] = _field(default_factory=dict)
 from mettagrid.simulator import Action
 
-from cvc.agent import helpers as _h
-from cvc.agent.helpers.types import KnownEntity
+from cvc.agent import KnownEntity, manhattan, team_id
 
 _ELEMENTS = ("carbon", "oxygen", "germanium", "silicon")
 
@@ -87,7 +86,7 @@ def _safe_distance(gs: Any) -> int:
     hub = gs.nearest_hub()
     if hub is None:
         return 0
-    return _h.manhattan(gs.position, hub.position)
+    return manhattan(gs.position, hub.position)
 
 
 def _has_role_gear(gs: Any, role: str) -> bool:
@@ -157,7 +156,7 @@ def _should_retreat(gs: Any) -> bool:
     # PCO: extra caution when low HP and far from hub
     if gs.hp < 60:
         hub = gs.nearest_hub()
-        if hub is not None and _h.manhattan(gs.position, hub.position) > 25:
+        if hub is not None and manhattan(gs.position, hub.position) > 25:
             return True
     return False
 
@@ -191,7 +190,7 @@ def _summarize(gs: Any) -> dict:
     hp = gs.hp
     pos = gs.position
     hub = gs.nearest_hub()
-    team = _h.team_id(gs.mg_state) if gs.mg_state else ""
+    team = team_id(gs.mg_state) if gs.mg_state else ""
     friendly_j = len(gs.known_junctions(lambda e: e.owner == team)) if team else 0
     enemy_j = len(gs.known_junctions(lambda e: e.owner not in {None, "neutral", team})) if team else 0
     neutral_j = len(gs.known_junctions(lambda e: e.owner in {None, "neutral"}))
@@ -214,7 +213,7 @@ def _summarize(gs: Any) -> dict:
         "team_resources": _team_resources(gs),
         "inventory": _inventory(gs),
         "junctions": {"friendly": friendly_j, "enemy": enemy_j, "neutral": neutral_j},
-        "safe_distance": 0 if hub is None else _h.manhattan(pos, hub.position),
+        "safe_distance": 0 if hub is None else manhattan(pos, hub.position),
         "stalled": _is_stalled(gs),
         "oscillating": _is_oscillating(gs),
         "has_gear": gs.has_role_gear(gs.role),

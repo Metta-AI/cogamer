@@ -6,8 +6,20 @@ from typing import TYPE_CHECKING
 
 from mettagrid_sdk.sdk import MacroDirective, MettagridState
 
-from cvc.agent import helpers as _h
-from cvc.agent.helpers import KnownEntity
+from cvc.agent import (
+    _TARGET_CLAIM_STEPS,
+    KnownEntity,
+    absolute_position,
+    aligner_target_score,
+    is_claimed_by_other,
+    is_usable_recent_extractor,
+    manhattan,
+    resource_priority,
+    scramble_target_score,
+    team_id,
+    teammate_closer_to_target,
+    within_alignment_network,
+)
 
 if TYPE_CHECKING:
     from cvc.agent.world_model import WorldModel
@@ -56,7 +68,7 @@ class TargetingMixin:
         stale_positions = [
             position
             for position, (_, step) in self._claims.items()
-            if self._step_index - step > _h._TARGET_CLAIM_STEPS
+            if self._step_index - step > _TARGET_CLAIM_STEPS
         ]
         for position in stale_positions:
             self._claims.pop(position)
@@ -100,8 +112,8 @@ class TargetingMixin:
         return positions
 
     def _nearest_alignable_neutral_junction(self, state: MettagridState) -> KnownEntity | None:
-        team = _h.team_id(state)
-        current_pos = _h.absolute_position(state)
+        team = team_id(state)
+        current_pos = absolute_position(state)
         hub = self._nearest_hub(state)  # type: ignore[attr-defined]
         hub_pos = hub.position if hub is not None else None
         hubs = self._world_model.entities(entity_type="hub", predicate=lambda entity: entity.team == team)
@@ -109,7 +121,7 @@ class TargetingMixin:
         network_sources = [*hubs, *friendly_junctions]
         candidates = []
         for entity in self._known_junctions(state, predicate=lambda junction: junction.owner in {None, "neutral"}):  # type: ignore[attr-defined]
-            if not _h.within_alignment_network(entity.position, network_sources):
+            if not within_alignment_network(entity.position, network_sources):
                 continue
             candidates.append(entity)
         if not candidates:
@@ -130,12 +142,12 @@ class TargetingMixin:
         return min(
             candidates,
             key=lambda entity: (
-                _h.aligner_target_score(
+                aligner_target_score(
                     current_position=current_pos,
                     candidate=entity,
                     unreachable=unreachable,
                     enemy_junctions=enemy_junctions,
-                    claimed_by_other=_h.is_claimed_by_other(
+                    claimed_by_other=is_claimed_by_other(
                         claims=self._claims,
                         candidate=entity.position,
                         agent_id=self._agent_id,
@@ -144,7 +156,7 @@ class TargetingMixin:
                     hub_position=hub_pos,
                     friendly_sources=network_sources,
                     hotspot_count=self._hotspots.get(entity.position, 0),
-                    teammate_closer=_h.teammate_closer_to_target(
+                    teammate_closer=teammate_closer_to_target(
                         current_position=current_pos,
                         target=entity.position,
                         teammate_positions=teammate_positions,
@@ -162,8 +174,8 @@ class TargetingMixin:
         if candidate is None:
             return sticky
 
-        current_pos = _h.absolute_position(state)
-        team = _h.team_id(state)
+        current_pos = absolute_position(state)
+        team = team_id(state)
         neutral_junctions = self._world_model.entities(
             entity_type="junction",
             predicate=lambda junction: junction.owner in {None, "neutral"},
@@ -177,7 +189,7 @@ class TargetingMixin:
         hubs = self._world_model.entities(entity_type="hub", predicate=lambda entity: entity.team == team)
         friendly_junctions = self._known_junctions(state, predicate=lambda entity: entity.owner == team)  # type: ignore[attr-defined]
         network_sources = [*hubs, *friendly_junctions]
-        sticky_score = _h.aligner_target_score(
+        sticky_score = aligner_target_score(
             current_position=current_pos,
             candidate=sticky,
             unreachable=[entity for entity in neutral_junctions if entity.position != sticky.position],
@@ -187,12 +199,12 @@ class TargetingMixin:
             friendly_sources=network_sources,
             hotspot_count=self._hotspots.get(sticky.position, 0),
         )[0]
-        candidate_score = _h.aligner_target_score(
+        candidate_score = aligner_target_score(
             current_position=current_pos,
             candidate=candidate,
             unreachable=[entity for entity in neutral_junctions if entity.position != candidate.position],
             enemy_junctions=enemy_junctions,
-            claimed_by_other=_h.is_claimed_by_other(
+            claimed_by_other=is_claimed_by_other(
                 claims=self._claims,
                 candidate=candidate.position,
                 agent_id=self._agent_id,
@@ -209,7 +221,7 @@ class TargetingMixin:
     def _sticky_align_target(self, state: MettagridState) -> KnownEntity | None:
         if self._sticky_target_kind != "junction" or self._sticky_target_position is None:
             return None
-        team = _h.team_id(state)
+        team = team_id(state)
         hubs = self._world_model.entities(entity_type="hub", predicate=lambda entity: entity.team == team)
         friendly_junctions = self._known_junctions(state, predicate=lambda entity: entity.owner == team)  # type: ignore[attr-defined]
         target = next(
@@ -223,7 +235,7 @@ class TargetingMixin:
         if target is None:
             self._clear_sticky_target()
             return None
-        if not _h.within_alignment_network(target.position, [*hubs, *friendly_junctions]):
+        if not within_alignment_network(target.position, [*hubs, *friendly_junctions]):
             self._clear_sticky_target()
             return None
         return target
@@ -235,17 +247,17 @@ class TargetingMixin:
             self._clear_sticky_target()
             return None
 
-        current_pos = _h.absolute_position(state)
+        current_pos = absolute_position(state)
         candidates: list[KnownEntity] = []
-        for resource_name in _h.resource_priority(state, resource_bias=self._resource_bias):
+        for resource_name in resource_priority(state, resource_bias=self._resource_bias):
             matches = self._world_model.entities(
                 entity_type=f"{resource_name}_extractor",
-                predicate=lambda entity: _h.is_usable_recent_extractor(entity, step=state.step or self._step_index),
+                predicate=lambda entity: is_usable_recent_extractor(entity, step=state.step or self._step_index),
             )
             candidates.extend(
                 sorted(
                     matches,
-                    key=lambda entity: (_h.manhattan(current_pos, entity.position), entity.position),
+                    key=lambda entity: (manhattan(current_pos, entity.position), entity.position),
                 )
             )
         if not candidates:
@@ -260,8 +272,8 @@ class TargetingMixin:
             return candidates[0]
 
         candidate = candidates[0]
-        sticky_distance = _h.manhattan(current_pos, sticky.position)
-        candidate_distance = _h.manhattan(current_pos, candidate.position)
+        sticky_distance = manhattan(current_pos, sticky.position)
+        candidate_distance = manhattan(current_pos, candidate.position)
         if candidate.position != sticky.position and candidate_distance + _TARGET_SWITCH_THRESHOLD < sticky_distance:
             return candidate
         return sticky
@@ -274,7 +286,7 @@ class TargetingMixin:
         hub = self._nearest_hub(state)  # type: ignore[attr-defined]
         if hub is None:
             return False
-        return _h.manhattan(_h.absolute_position(state), hub.position) <= 1
+        return manhattan(absolute_position(state), hub.position) <= 1
 
     def _sticky_miner_target(self, state: MettagridState) -> KnownEntity | None:
         if self._sticky_target_kind is None or self._sticky_target_position is None:
@@ -286,7 +298,7 @@ class TargetingMixin:
                 entity
                 for entity in self._world_model.entities(
                     entity_type=self._sticky_target_kind,
-                    predicate=lambda entity: _h.is_usable_recent_extractor(entity, step=state.step or self._step_index),
+                    predicate=lambda entity: is_usable_recent_extractor(entity, step=state.step or self._step_index),
                 )
                 if entity.position == self._sticky_target_position
             ),
@@ -300,8 +312,8 @@ class TargetingMixin:
     # ── Scramble targeting ──────────────────────────────────────────
 
     def _best_scramble_target(self, state: MettagridState) -> KnownEntity | None:
-        team = _h.team_id(state)
-        current_pos = _h.absolute_position(state)
+        team = team_id(state)
+        current_pos = absolute_position(state)
         hub = self._nearest_hub(state)  # type: ignore[attr-defined]
         neutral_junctions = self._known_junctions(state, predicate=lambda entity: entity.owner in {None, "neutral"})  # type: ignore[attr-defined]
         friendly_junctions = self._known_junctions(state, predicate=lambda entity: entity.owner == team)  # type: ignore[attr-defined]
@@ -318,7 +330,7 @@ class TargetingMixin:
         return min(
             enemy_junctions,
             key=lambda entity: (
-                _h.scramble_target_score(
+                scramble_target_score(
                     current_position=current_pos,
                     hub_position=hub_position,
                     candidate=entity,
@@ -337,8 +349,8 @@ class TargetingMixin:
         if candidate is None:
             return sticky
 
-        team = _h.team_id(state)
-        current_pos = _h.absolute_position(state)
+        team = team_id(state)
+        current_pos = absolute_position(state)
         hub = self._nearest_hub(state)  # type: ignore[attr-defined]
         hub_position = current_pos if hub is None else hub.position
         neutral_junctions = self._world_model.entities(
@@ -346,14 +358,14 @@ class TargetingMixin:
             predicate=lambda entity: entity.owner in {None, "neutral"},
         )
         friendly_junctions = self._known_junctions(state, predicate=lambda entity: entity.owner == team)  # type: ignore[attr-defined]
-        sticky_score = _h.scramble_target_score(
+        sticky_score = scramble_target_score(
             current_position=current_pos,
             hub_position=hub_position,
             candidate=sticky,
             neutral_junctions=neutral_junctions,
             friendly_junctions=friendly_junctions,
         )[0]
-        candidate_score = _h.scramble_target_score(
+        candidate_score = scramble_target_score(
             current_position=current_pos,
             hub_position=hub_position,
             candidate=candidate,
@@ -367,7 +379,7 @@ class TargetingMixin:
     def _sticky_scramble_target(self, state: MettagridState) -> KnownEntity | None:
         if self._sticky_target_kind != "junction" or self._sticky_target_position is None:
             return None
-        team = _h.team_id(state)
+        team = team_id(state)
         target = next(
             (
                 entity

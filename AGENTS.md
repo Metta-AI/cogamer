@@ -13,7 +13,7 @@ Skills are in `cogent/skills/`. Read the `.md` file and follow its instructions.
 
 ## Docs
 
-- [src/cogamer/cvc/AGENTS.md](src/cogamer/cvc/AGENTS.md) — Game rules, policy architecture, CLI commands, key insights
+- [docs/cvc.md](docs/cvc.md) — Game rules, policy architecture, CLI commands, key insights
 - [docs/architecture.md](docs/architecture.md) — Program table design, PCO loop, alpha.0 reference
 - [docs/strategy.md](docs/strategy.md) — What works, what to try, dead ends
 - [docs/cogames.md](docs/cogames.md) — CLI setup, running, uploading, monitoring

@@ -10,8 +10,7 @@ from __future__ import annotations
 
 from mettagrid_sdk.sdk import MacroDirective, MettagridState
 
-from cvc.agent import helpers as _h
-from cvc.agent.helpers.types import KnownEntity
+from cvc.agent import KnownEntity, absolute_position, manhattan
 from cvc.agent.main import CvcEngine
 
 _ELEMENTS = ("carbon", "oxygen", "germanium", "silicon")
@@ -69,8 +68,8 @@ class CogletAgentPolicy(CvcEngine):
         if super()._should_retreat(state, role, safe_target):
             return True
         if role == "miner" and safe_target is not None:
-            pos = _h.absolute_position(state)
-            dist = _h.manhattan(pos, safe_target.position)
+            pos = absolute_position(state)
+            dist = manhattan(pos, safe_target.position)
             hp = int(state.self_state.inventory.get("hp", 0))
             if dist > _MINER_MAX_HUB_DISTANCE and hp < dist + 10:
                 return True

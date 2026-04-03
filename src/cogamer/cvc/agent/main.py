@@ -13,7 +13,18 @@ from typing import Any
 from mettagrid_sdk.games.cogsguard import CogsguardSemanticSurface
 from mettagrid_sdk.sdk import MacroDirective, MettagridState
 
-from cvc.agent import helpers as _h
+from cvc.agent import (
+    _ELEMENTS,
+    absolute_position,
+    format_position,
+    has_role_gear,
+    heart_batch_target,
+    inventory_signature,
+    manhattan,
+    needs_emergency_mining,
+    phase_name,
+    team_can_afford_gear,
+)
 from cvc.agent.junctions import JunctionMixin
 from cvc.agent.navigation import MoveAttempt, NavigationMixin, NavigationObservation
 from cvc.agent.pressure import PressureMixin
@@ -66,7 +77,7 @@ class CvcEngine(
         self._vibe_actions = set(policy_env_info.vibe_action_names)
         self._fallback_action = "noop" if "noop" in self._action_names else policy_env_info.action_names[0]
         self._explore_index = 0
-        self._default_resource_bias = _h._ELEMENTS[self._role_id % len(_h._ELEMENTS)]
+        self._default_resource_bias = _ELEMENTS[self._role_id % len(_ELEMENTS)]
         self._resource_bias = self._default_resource_bias
         self._last_inventory_signature: tuple[tuple[str, int], ...] | None = None
         self._stalled_steps = 0
@@ -99,12 +110,12 @@ class CvcEngine(
         self._world_model.update(state)
         self._update_junctions(state)
         self._world_model.prune_missing_extractors(
-            current_position=_h.absolute_position(state),
+            current_position=absolute_position(state),
             visible_entities=state.visible_entities,
             obs_width=self.policy_env_info.obs_width,
             obs_height=self.policy_env_info.obs_height,
         )
-        current_pos = _h.absolute_position(state)
+        current_pos = absolute_position(state)
         self._update_temp_blocks(current_pos)
         self._update_stall_counter(state, current_pos)
 
@@ -122,12 +133,12 @@ class CvcEngine(
             "subtask": summary,
             "summary": summary,
             "oscillation_steps": self._oscillation_steps,
-            "phase": _h.phase_name(state, role),
+            "phase": phase_name(state, role),
             "heart": int(state.self_state.inventory.get("heart", 0)),
-            "heart_batch_target": _h.heart_batch_target(state, role),
+            "heart_batch_target": heart_batch_target(state, role),
             "target_kind": self._current_target_kind or "",
             "target_position": (
-                "" if self._current_target_position is None else _h.format_position(self._current_target_position)
+                "" if self._current_target_position is None else format_position(self._current_target_position)
             ),
             "directive_role": directive.role or "",
             "directive_resource_bias": directive.resource_bias or "",
@@ -139,7 +150,7 @@ class CvcEngine(
         }
         self._previous_state = state
         self._last_global_pos = current_pos
-        self._last_inventory_signature = _h.inventory_signature(state)
+        self._last_inventory_signature = inventory_signature(state)
         return action
 
     def reset(self, simulation=None) -> None:
@@ -171,7 +182,7 @@ class CvcEngine(
 
     def _sanitize_macro_directive(self, directive: MacroDirective) -> MacroDirective:
         role = directive.role if directive.role in {"miner", "aligner", "scrambler", "scout"} else None
-        resource_bias = directive.resource_bias if directive.resource_bias in _h._ELEMENTS else None
+        resource_bias = directive.resource_bias if directive.resource_bias in _ELEMENTS else None
         note = directive.note.strip()
         objective = directive.objective.strip() if directive.objective is not None else None
         target_entity_id = directive.target_entity_id.strip() if directive.target_entity_id is not None else None
@@ -198,7 +209,7 @@ class CvcEngine(
         ):
             self._clear_sticky_target()
         safe_target = self._nearest_hub(state)
-        safe_distance = 0 if safe_target is None else _h.manhattan(_h.absolute_position(state), safe_target.position)
+        safe_distance = 0 if safe_target is None else manhattan(absolute_position(state), safe_target.position)
 
         hp = int(state.self_state.inventory.get("hp", 0))
         step = state.step or self._step_index
@@ -223,7 +234,7 @@ class CvcEngine(
             self._clear_sticky_target()
             if safe_target is not None and safe_distance > 2:
                 return self._move_to_known(state, safe_target, summary="retreat_to_hub")
-            if _h.has_role_gear(state, role):
+            if has_role_gear(state, role):
                 return self._hold(summary="retreat_hold", vibe="change_vibe_default")
 
         if self._oscillation_steps >= _OSCILLATION_UNSTICK_STEPS:
@@ -235,20 +246,20 @@ class CvcEngine(
         # Emergency mining: only aligners/scramblers without gear AND hearts
         # help mine. Keeping geared agents on-task is more valuable than
         # marginal resource gains from pulling them off.
-        if role != "miner" and _h.needs_emergency_mining(state):
-            if not _h.has_role_gear(state, role) and int(state.self_state.inventory.get("heart", 0)) <= 0:
+        if role != "miner" and needs_emergency_mining(state):
+            if not has_role_gear(state, role) and int(state.self_state.inventory.get("heart", 0)) <= 0:
                 return self._miner_action(state, summary_prefix="emergency_")
 
-        if role == "aligner" and not _h.has_role_gear(state, role):
+        if role == "aligner" and not has_role_gear(state, role):
             if (state.step or self._step_index) < _ALIGNER_GEAR_DELAY_STEPS:
                 self._clear_target_claim()
                 self._clear_sticky_target()
                 return self._miner_action(state, summary_prefix="delay_gear_")
 
-        if not _h.has_role_gear(state, role):
+        if not has_role_gear(state, role):
             self._clear_target_claim()
             self._clear_sticky_target()
-            if not _h.team_can_afford_gear(state, role):
+            if not team_can_afford_gear(state, role):
                 return self._miner_action(state, summary_prefix=f"fund_{role}_gear_")
             return self._acquire_role_gear(state, role)
 

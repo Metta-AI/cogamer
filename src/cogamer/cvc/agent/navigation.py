@@ -9,8 +9,19 @@ from typing import TYPE_CHECKING
 
 from mettagrid_sdk.sdk import MettagridState
 
-from cvc.agent import helpers as _h
-from cvc.agent.helpers import KnownEntity
+from cvc.agent import (
+    _ELEMENTS,
+    _MOVE_DELTAS,
+    KnownEntity,
+    absolute_position,
+    direction_from_step,
+    explore_offsets,
+    greedy_step,
+    inventory_signature,
+    manhattan,
+    role_vibe,
+    unstick_directions,
+)
 from mettagrid.simulator import Action
 
 if TYPE_CHECKING:
@@ -82,13 +93,13 @@ class NavigationMixin:
     ) -> tuple[Action, str]:
         self._current_target_position = target
         self._current_target_kind = self._current_target_kind or "position"
-        current = _h.absolute_position(state)
+        current = absolute_position(state)
         next_step = self._next_step(current, target)
         if next_step is None:
             self._last_attempt = None
             return self._hold(summary=f"{summary}_hold", vibe=vibe)
 
-        direction = _h.direction_from_step(current, next_step)
+        direction = direction_from_step(current, next_step)
         stationary_use = next_step == target and self._world_model.is_occupied(target)
         self._last_attempt = MoveAttempt(direction=direction, stationary_use=stationary_use)
         return self._action(f"move_{direction}", vibe=vibe), summary
@@ -105,7 +116,7 @@ class NavigationMixin:
 
         blocked = self._world_model.occupied_cells(exclude={target})
         blocked.update(cell for cell, until_step in self._temp_blocks.items() if until_step >= self._step_index)
-        if _h.manhattan(current, target) <= 1:
+        if manhattan(current, target) <= 1:
             return target
 
         min_x = min(current[0], target[0]) - _DEFAULT_BOUND_MARGIN
@@ -123,7 +134,7 @@ class NavigationMixin:
                 break
             if cost > best_cost.get(node, cost):
                 continue
-            for dx, dy in _h._MOVE_DELTAS.values():
+            for dx, dy in _MOVE_DELTAS.values():
                 nxt = (node[0] + dx, node[1] + dy)
                 if nxt in blocked:
                     continue
@@ -134,11 +145,11 @@ class NavigationMixin:
                     continue
                 best_cost[nxt] = next_cost
                 came_from[nxt] = node
-                priority = next_cost + _h.manhattan(nxt, target)
+                priority = next_cost + manhattan(nxt, target)
                 heapq.heappush(frontier, (priority, next_cost, nxt))
 
         if target not in came_from:
-            return _h.greedy_step(current, target, blocked)
+            return greedy_step(current, target, blocked)
 
         step = target
         while came_from[step] != current:
@@ -155,34 +166,34 @@ class NavigationMixin:
             return
         if self._last_attempt.stationary_use:
             return
-        dx, dy = _h._MOVE_DELTAS[self._last_attempt.direction]
+        dx, dy = _MOVE_DELTAS[self._last_attempt.direction]
         blocked_cell = (current_pos[0] + dx, current_pos[1] + dy)
         self._temp_blocks[blocked_cell] = self._step_index + _TEMP_BLOCK_STEPS
 
     def _explore_action(self, state: MettagridState, *, role: str, summary: str) -> tuple[Action, str]:
-        current_pos = _h.absolute_position(state)
+        current_pos = absolute_position(state)
         hub = self._nearest_hub(state)  # type: ignore[attr-defined]
         center = (hub.global_x, hub.global_y) if hub is not None else current_pos
-        offsets = _h.explore_offsets(role)
+        offsets = explore_offsets(role)
         offset_index = (self._explore_index + self._role_id) % len(offsets)
         target = offsets[offset_index]
         absolute_target = (center[0] + target[0], center[1] + target[1])
-        if _h.manhattan(current_pos, absolute_target) <= 2:
+        if manhattan(current_pos, absolute_target) <= 2:
             self._explore_index += 1
             offset_index = (self._explore_index + self._role_id) % len(offsets)
             target = offsets[offset_index]
             absolute_target = (center[0] + target[0], center[1] + target[1])
-        return self._move_to_position(state, absolute_target, summary=summary, vibe=_h.role_vibe(role))
+        return self._move_to_position(state, absolute_target, summary=summary, vibe=role_vibe(role))
 
     def _unstick_action(self, state: MettagridState, role: str) -> tuple[Action, str]:
-        current = _h.absolute_position(state)
+        current = absolute_position(state)
         if role == "miner":
             self._world_model.forget_nearest(
                 position=current,
                 entity_type=f"{self._resource_bias}_extractor",
                 max_distance=2,
             )
-            for resource_name in _h._ELEMENTS:
+            for resource_name in _ELEMENTS:
                 self._world_model.forget_nearest(
                     position=current,
                     entity_type=f"{resource_name}_extractor",
@@ -191,18 +202,18 @@ class NavigationMixin:
         self._explore_index += 1
         blocked = self._world_model.occupied_cells()
         blocked.update(cell for cell, until_step in self._temp_blocks.items() if until_step >= self._step_index)
-        for direction in _h.unstick_directions(self._agent_id, self._step_index):
-            dx, dy = _h._MOVE_DELTAS[direction]
+        for direction in unstick_directions(self._agent_id, self._step_index):
+            dx, dy = _MOVE_DELTAS[direction]
             nxt = (current[0] + dx, current[1] + dy)
             if nxt in blocked:
                 continue
             self._last_attempt = MoveAttempt(direction=direction, stationary_use=False)
-            return self._action(f"move_{direction}", vibe=_h.role_vibe(role)), f"unstick_{role}"
-        return self._hold(summary=f"unstick_{role}_hold", vibe=_h.role_vibe(role))
+            return self._action(f"move_{direction}", vibe=role_vibe(role)), f"unstick_{role}"
+        return self._hold(summary=f"unstick_{role}_hold", vibe=role_vibe(role))
 
     def _update_stall_counter(self, state: MettagridState, current_pos: tuple[int, int]) -> None:
-        inventory_signature = _h.inventory_signature(state)
-        if self._last_global_pos == current_pos and self._last_inventory_signature == inventory_signature:
+        inv_sig = inventory_signature(state)
+        if self._last_global_pos == current_pos and self._last_inventory_signature == inv_sig:
             self._stalled_steps += 1
         else:
             self._stalled_steps = 0

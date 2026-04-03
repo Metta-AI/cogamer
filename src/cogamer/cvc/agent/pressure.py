@@ -7,8 +7,23 @@ from typing import TYPE_CHECKING
 
 from mettagrid_sdk.sdk import MettagridState
 
-from cvc.agent import helpers as _h
-from cvc.agent.helpers import KnownEntity
+from cvc.agent import (
+    KnownEntity,
+    _JUNCTION_ALIGN_DISTANCE,
+    _JUNCTION_AOE_RANGE,
+    absolute_position,
+    deposit_threshold,
+    has_role_gear,
+    heart_supply_capacity,
+    manhattan,
+    resource_total,
+    retreat_threshold,
+    team_can_afford_gear,
+    team_can_refill_hearts,
+    team_id,
+    team_min_resource,
+    within_alignment_network,
+)
 
 if TYPE_CHECKING:
     from cvc.agent.world_model import WorldModel
@@ -51,17 +66,17 @@ class PressureMixin:
 
     def _macro_snapshot(self, state: MettagridState, role: str) -> dict[str, int | str | bool]:
         safe_target = self._nearest_friendly_depot(state)  # type: ignore[attr-defined]
-        safe_distance = 0 if safe_target is None else _h.manhattan(_h.absolute_position(state), safe_target.position)
+        safe_distance = 0 if safe_target is None else manhattan(absolute_position(state), safe_target.position)
         hp = int(state.self_state.inventory.get("hp", 0))
-        team = _h.team_id(state)
-        in_enemy_aoe = self._in_enemy_aoe(state, _h.absolute_position(state), team_id=team)
+        team = team_id(state)
+        in_enemy_aoe = self._in_enemy_aoe(state, absolute_position(state), team_id=team)
         low_hp_risk = self._should_retreat(state, role, safe_target)
         payload_at_risk = low_hp_risk and (
-            int(state.self_state.inventory.get("heart", 0)) > 0 or _h.resource_total(state) > 0
+            int(state.self_state.inventory.get("heart", 0)) > 0 or resource_total(state) > 0
         )
         pressure_metrics = self._pressure_metrics(state)
         aligner_budget, scrambler_budget = self._pressure_budgets(state)
-        heart_supply = _h.heart_supply_capacity(state)
+        heart_supply = heart_supply_capacity(state)
 
         macro_note = (
             f"frontier={pressure_metrics.frontier_neutral_junctions} "
@@ -75,7 +90,7 @@ class PressureMixin:
             "safe_distance": safe_distance,
             "low_hp_risk": low_hp_risk,
             "payload_at_risk": payload_at_risk,
-            "team_can_afford_role_gear": _h.team_can_afford_gear(state, role),
+            "team_can_afford_role_gear": team_can_afford_gear(state, role),
             "in_enemy_aoe": in_enemy_aoe,
             "frontier_neutral_junctions": pressure_metrics.frontier_neutral_junctions,
             "best_frontier_coverage": pressure_metrics.best_frontier_coverage,
@@ -88,7 +103,7 @@ class PressureMixin:
         }
 
     def _pressure_metrics(self, state: MettagridState) -> PressureMetrics:
-        team = _h.team_id(state)
+        team = team_id(state)
         hub = self._nearest_hub(state)  # type: ignore[attr-defined]
         friendly_sources = []
         if hub is not None:
@@ -96,7 +111,7 @@ class PressureMixin:
         friendly_sources.extend(self._known_junctions(state, predicate=lambda entity: entity.owner == team))  # type: ignore[attr-defined]
         neutral_junctions = self._known_junctions(state, predicate=lambda entity: entity.owner in {None, "neutral"})  # type: ignore[attr-defined]
         frontier_junctions = [
-            entity for entity in neutral_junctions if _h.within_alignment_network(entity.position, friendly_sources)
+            entity for entity in neutral_junctions if within_alignment_network(entity.position, friendly_sources)
         ]
         unreachable_junctions = [entity for entity in neutral_junctions if entity not in frontier_junctions]
         best_frontier_coverage = max(
@@ -104,7 +119,7 @@ class PressureMixin:
                 sum(
                     1
                     for neutral in unreachable_junctions
-                    if _h.manhattan(candidate.position, neutral.position) <= _h._JUNCTION_ALIGN_DISTANCE
+                    if manhattan(candidate.position, neutral.position) <= _JUNCTION_ALIGN_DISTANCE
                 )
                 for candidate in frontier_junctions
             ),
@@ -119,7 +134,7 @@ class PressureMixin:
                 sum(
                     1
                     for neutral in neutral_junctions
-                    if _h.manhattan(enemy.position, neutral.position) <= _h._JUNCTION_AOE_RANGE
+                    if manhattan(enemy.position, neutral.position) <= _JUNCTION_AOE_RANGE
                 )
                 for enemy in enemy_junctions
             ),
@@ -134,8 +149,8 @@ class PressureMixin:
     def _pressure_budgets(self, state: MettagridState, *, objective: str | None = None) -> tuple[int, int]:
         step = state.step or self._step_index
 
-        min_res = _h.team_min_resource(state)
-        can_hearts = _h.team_can_refill_hearts(state)
+        min_res = team_min_resource(state)
+        can_hearts = team_can_refill_hearts(state)
         if step < 30:
             pressure_budget = 2
         elif step < 3000:
@@ -165,7 +180,7 @@ class PressureMixin:
             predicate=lambda entity: entity.owner not in {None, "neutral", team_id},
         )
         for enemy in enemies:
-            if _h.manhattan(position, enemy.position) <= _h._JUNCTION_AOE_RANGE:
+            if manhattan(position, enemy.position) <= _JUNCTION_AOE_RANGE:
                 return True
         return False
 
@@ -176,47 +191,47 @@ class PressureMixin:
             predicate=lambda entity: entity.owner not in {None, "neutral", team_id},
         )
         for enemy in enemies:
-            if _h.manhattan(position, enemy.position) <= 20:
+            if manhattan(position, enemy.position) <= 20:
                 return True
         return False
 
     def _should_retreat(self, state: MettagridState, role: str, safe_target: KnownEntity | None) -> bool:
         hp = int(state.self_state.inventory.get("hp", 0))
         if safe_target is None:
-            return hp <= _h.retreat_threshold(state, role)
+            return hp <= retreat_threshold(state, role)
 
-        safe_steps = max(0, _h.manhattan(_h.absolute_position(state), safe_target.position) - _h._JUNCTION_AOE_RANGE)
+        safe_steps = max(0, manhattan(absolute_position(state), safe_target.position) - _JUNCTION_AOE_RANGE)
         margin = _RETREAT_MARGIN
-        current_pos = _h.absolute_position(state)
-        team = _h.team_id(state)
+        current_pos = absolute_position(state)
+        team = team_id(state)
         if self._in_enemy_aoe(state, current_pos, team_id=team):
             margin += 10
         elif self._near_enemy_territory(state, current_pos, team_id=team):
             margin += 5
         margin += int(state.self_state.inventory.get("heart", 0)) * 5
-        margin += min(_h.resource_total(state), 12) // 2
-        if not _h.has_role_gear(state, role):
+        margin += min(resource_total(state), 12) // 2
+        if not has_role_gear(state, role):
             margin += 10
         if (state.step or 0) >= 2_500:
             margin += 10 if role in {"aligner", "scrambler"} else 5
         return hp <= safe_steps + margin
 
     def _should_deposit_resources(self, state: MettagridState) -> bool:
-        cargo = _h.resource_total(state)
+        cargo = resource_total(state)
         if cargo <= 0:
             return False
-        if cargo >= _h.deposit_threshold(state):
+        if cargo >= deposit_threshold(state):
             return True
 
         safe_target = self._nearest_friendly_depot(state)  # type: ignore[attr-defined]
         if safe_target is None:
             return cargo >= 4
 
-        safe_distance = _h.manhattan(_h.absolute_position(state), safe_target.position)
+        safe_distance = manhattan(absolute_position(state), safe_target.position)
         if cargo >= 16 and safe_distance > 18:
             return True
         if cargo >= 8 and self._should_retreat(state, "miner", safe_target):
             return True
-        if cargo >= 12 and self._in_enemy_aoe(state, _h.absolute_position(state), team_id=_h.team_id(state)):
+        if cargo >= 12 and self._in_enemy_aoe(state, absolute_position(state), team_id=team_id(state)):
             return True
         return False

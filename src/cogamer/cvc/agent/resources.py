@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from mettagrid_sdk.sdk import MettagridState, SemanticEntity
 
-from cvc.agent.helpers.geometry import manhattan
-from cvc.agent.helpers.types import (
+from cvc.agent.geometry import manhattan
+from cvc.agent.types import (
     _ELEMENTS,
     _EMERGENCY_RESOURCE_LOW,
     _GEAR_COSTS,

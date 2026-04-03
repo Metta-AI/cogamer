@@ -6,7 +6,13 @@ from typing import TYPE_CHECKING
 
 from mettagrid_sdk.sdk import MettagridState
 
-from cvc.agent import helpers as _h
+from cvc.agent import (
+    absolute_position,
+    resource_total,
+    should_batch_hearts,
+    spawn_relative_station_target,
+    team_can_refill_hearts,
+)
 from mettagrid.simulator import Action
 
 if TYPE_CHECKING:
@@ -27,12 +33,12 @@ class RolesMixin:
 
     def _acquire_role_gear(self, state: MettagridState, role: str) -> tuple[Action, str]:
         station_type = f"{role}_station"
-        current_pos = _h.absolute_position(state)
+        current_pos = absolute_position(state)
         station = self._world_model.nearest(position=current_pos, entity_type=station_type)
         if station is not None:
             return self._move_to_known(state, station, summary=f"get_{role}_gear", vibe="change_vibe_gear")  # type: ignore[attr-defined]
 
-        target = _h.spawn_relative_station_target(self._role_id, role)
+        target = spawn_relative_station_target(self._role_id, role)
         if target is None:
             hub = self._nearest_hub(state)  # type: ignore[attr-defined]
             if hub is None:
@@ -71,12 +77,12 @@ class RolesMixin:
         if hearts <= 0:
             self._clear_target_claim()  # type: ignore[attr-defined]
             self._clear_sticky_target()  # type: ignore[attr-defined]
-            if not _h.team_can_refill_hearts(state):
+            if not team_can_refill_hearts(state):
                 return self._miner_action(state, summary_prefix="rebuild_hearts_")
             if hub is not None:
                 return self._move_to_known(state, hub, summary="acquire_heart", vibe="change_vibe_heart")  # type: ignore[attr-defined]
             return self._explore_action(state, role="aligner", summary="find_hub_for_heart")  # type: ignore[attr-defined]
-        if _h.should_batch_hearts(state, role="aligner", hub_position=hub.position if hub else None):
+        if should_batch_hearts(state, role="aligner", hub_position=hub.position if hub else None):
             self._clear_target_claim()  # type: ignore[attr-defined]
             self._clear_sticky_target()  # type: ignore[attr-defined]
             assert hub is not None
@@ -90,7 +96,7 @@ class RolesMixin:
 
         self._clear_target_claim()  # type: ignore[attr-defined]
         self._clear_sticky_target()  # type: ignore[attr-defined]
-        if _h.resource_total(state) > 0:
+        if resource_total(state) > 0:
             depot = self._nearest_friendly_depot(state)  # type: ignore[attr-defined]
             if depot is not None:
                 return self._move_to_known(state, depot, summary="deposit_cargo", vibe="change_vibe_aligner")  # type: ignore[attr-defined]
@@ -103,12 +109,12 @@ class RolesMixin:
         hub = self._nearest_hub(state)  # type: ignore[attr-defined]
         if hearts <= 0:
             self._clear_sticky_target()  # type: ignore[attr-defined]
-            if not _h.team_can_refill_hearts(state):
+            if not team_can_refill_hearts(state):
                 return self._miner_action(state, summary_prefix="rebuild_hearts_")
             if hub is not None:
                 return self._move_to_known(state, hub, summary="acquire_heart", vibe="change_vibe_heart")  # type: ignore[attr-defined]
             return self._explore_action(state, role="scrambler", summary="find_hub_for_heart")  # type: ignore[attr-defined]
-        if _h.should_batch_hearts(state, role="scrambler", hub_position=hub.position if hub else None):
+        if should_batch_hearts(state, role="scrambler", hub_position=hub.position if hub else None):
             self._clear_sticky_target()  # type: ignore[attr-defined]
             assert hub is not None
             return self._move_to_known(state, hub, summary="batch_hearts", vibe="change_vibe_heart")  # type: ignore[attr-defined]

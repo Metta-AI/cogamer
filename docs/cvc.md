@@ -108,17 +108,18 @@ Extends `CvcEngine` with:
 ### File Layout
 ```
 cvc/
-├── cogamer_policy.py              # CvCPolicy + CvCPolicyImpl + CvCAgentState + LLM brain
-├── AGENTS.md                  # This file
+├── cogamer_policy.py          # CvCPolicy + CvCPolicyImpl + CvCAgentState + LLM brain
+├── programs.py                # Flat program table (all 32 programs for PCO)
+├── game_state.py              # GameState adapter wrapping CogletAgentPolicy
 └── agent/
-    ├── coglet_policy.py       # CvCAgentPolicy (heuristic overrides: resource bias, budgets, retreat)
-    ├── engine.py              # CvcEngine (heuristic decision tree, pathfinding, targeting)
+    ├── __init__.py            # Barrel file re-exporting all helpers
+    ├── main.py                # CvcEngine (heuristic decision tree, pathfinding, targeting)
+    ├── coglet_policy.py       # CogletAgentPolicy (heuristic overrides: resource bias, budgets, retreat)
     ├── world_model.py         # WorldModel (per-agent entity memory)
-    └── helpers/
-        ├── types.py           # Constants, KnownEntity
-        ├── targeting.py       # Junction/extractor scoring
-        ├── resources.py       # Deposit/heart/resource logic
-        └── geometry.py        # Manhattan distance, position helpers
+    ├── types.py               # Constants, KnownEntity
+    ├── scoring.py             # Junction/extractor scoring
+    ├── resources.py           # Deposit/heart/resource logic
+    └── geometry.py            # Manhattan distance, position helpers
 ```
 
 ### Per-Agent Decision Loop

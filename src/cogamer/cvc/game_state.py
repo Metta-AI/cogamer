@@ -12,9 +12,18 @@ from typing import Any
 from mettagrid_sdk.games.cogsguard import CogsguardSemanticSurface
 from mettagrid_sdk.sdk import MacroDirective, MettagridState
 
-from cvc.agent import helpers as _h
+from cvc.agent import (
+    KnownEntity,
+    absolute_position,
+    has_role_gear,
+    inventory_signature,
+    is_usable_recent_extractor,
+    needs_emergency_mining,
+    resource_priority,
+    team_can_afford_gear,
+    team_id,
+)
 from cvc.agent.coglet_policy import CogletAgentPolicy
-from cvc.agent.helpers.types import KnownEntity
 from cvc.agent.world_model import WorldModel
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 from mettagrid.simulator import Action
@@ -79,7 +88,7 @@ class GameState:
         # World model update
         engine._world_model.update(state)
         engine._update_junctions(state)
-        current_pos = _h.absolute_position(state)
+        current_pos = absolute_position(state)
         engine._world_model.prune_missing_extractors(
             current_position=current_pos,
             visible_entities=state.visible_entities,
@@ -117,11 +126,11 @@ class GameState:
         state = self.mg_state
         if state is None:
             return
-        current_pos = _h.absolute_position(state)
+        current_pos = absolute_position(state)
         engine._record_navigation_observation(current_pos, summary)
         engine._previous_state = state
         engine._last_global_pos = current_pos
-        engine._last_inventory_signature = _h.inventory_signature(state)
+        engine._last_inventory_signature = inventory_signature(state)
 
     # ── Properties delegating to engine/state ─────────────────────────
 
@@ -143,7 +152,7 @@ class GameState:
     def position(self) -> tuple[int, int]:
         if self.mg_state is None:
             return (0, 0)
-        return _h.absolute_position(self.mg_state)
+        return absolute_position(self.mg_state)
 
     @property
     def resource_bias(self) -> str:
@@ -250,27 +259,27 @@ class GameState:
 
     def has_role_gear(self, role: str) -> bool:
         assert self.mg_state is not None
-        return _h.has_role_gear(self.mg_state, role)
+        return has_role_gear(self.mg_state, role)
 
     def team_can_afford_gear(self, role: str) -> bool:
         assert self.mg_state is not None
-        return _h.team_can_afford_gear(self.mg_state, role)
+        return team_can_afford_gear(self.mg_state, role)
 
     def needs_emergency_mining(self) -> bool:
         assert self.mg_state is not None
-        return _h.needs_emergency_mining(self.mg_state)
+        return needs_emergency_mining(self.mg_state)
 
     def resource_priority(self) -> list[str]:
         assert self.mg_state is not None
-        return _h.resource_priority(self.mg_state, resource_bias=self.resource_bias)
+        return resource_priority(self.mg_state, resource_bias=self.resource_bias)
 
     def nearest_extractor(self, resource: str) -> KnownEntity | None:
         assert self.mg_state is not None
-        current_pos = _h.absolute_position(self.mg_state)
+        current_pos = absolute_position(self.mg_state)
         return self.world_model.nearest(
             position=current_pos,
             entity_type=f"{resource}_extractor",
-            predicate=lambda e: _h.is_usable_recent_extractor(
+            predicate=lambda e: is_usable_recent_extractor(
                 e, step=self.step_index
             ),
         )
@@ -283,7 +292,7 @@ class GameState:
 
     def team_id(self) -> str:
         assert self.mg_state is not None
-        return _h.team_id(self.mg_state)
+        return team_id(self.mg_state)
 
     # ── Reset ─────────────────────────────────────────────────────────
 

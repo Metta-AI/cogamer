@@ -8,8 +8,7 @@ from typing import TYPE_CHECKING
 from mettagrid_sdk.games.cogsguard import COGSGUARD_BOOTSTRAP_HUB_OFFSETS
 from mettagrid_sdk.sdk import MettagridState
 
-from cvc.agent import helpers as _h
-from cvc.agent.helpers import KnownEntity
+from cvc.agent import KnownEntity, absolute_position, manhattan, team_id
 
 if TYPE_CHECKING:
     from cvc.agent.world_model import WorldModel
@@ -27,9 +26,9 @@ class JunctionMixin:
 
     def _nearest_hub(self, state: MettagridState) -> KnownEntity | None:
         hub = self._world_model.nearest(
-            position=_h.absolute_position(state),
+            position=absolute_position(state),
             entity_type="hub",
-            predicate=lambda entity: entity.team == _h.team_id(state),
+            predicate=lambda entity: entity.team == team_id(state),
         )
         if hub is not None:
             return hub
@@ -42,16 +41,16 @@ class JunctionMixin:
             global_x=bootstrap_offset[0],
             global_y=bootstrap_offset[1],
             labels=(),
-            team=_h.team_id(state),
-            owner=_h.team_id(state),
+            team=team_id(state),
+            owner=team_id(state),
             last_seen_step=state.step or self._step_index,
             attributes={},
         )
 
     def _nearest_friendly_depot(self, state: MettagridState) -> KnownEntity | None:
-        team = _h.team_id(state)
+        team = team_id(state)
         depot = self._world_model.nearest(
-            position=_h.absolute_position(state),
+            position=absolute_position(state),
             predicate=lambda entity: (
                 (entity.entity_type == "hub" and entity.team == team)
                 or (entity.entity_type == "junction" and entity.owner == team)
@@ -61,10 +60,10 @@ class JunctionMixin:
         if shared_friendly:
             shared_nearest = min(
                 shared_friendly,
-                key=lambda entity: (_h.manhattan(_h.absolute_position(state), entity.position), entity.position),
+                key=lambda entity: (manhattan(absolute_position(state), entity.position), entity.position),
             )
-            if depot is None or _h.manhattan(_h.absolute_position(state), shared_nearest.position) < _h.manhattan(
-                _h.absolute_position(state), depot.position
+            if depot is None or manhattan(absolute_position(state), shared_nearest.position) < manhattan(
+                absolute_position(state), depot.position
             ):
                 depot = shared_nearest
         if depot is not None:
@@ -75,7 +74,7 @@ class JunctionMixin:
         hub = self._nearest_hub(state)
         if hub is None:
             return
-        team = _h.team_id(state)
+        team = team_id(state)
         for entity in state.visible_entities:
             if entity.entity_type != "junction":
                 continue
