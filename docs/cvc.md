@@ -109,9 +109,8 @@ Extends `CvcEngine` with:
 ```
 cvc/
 ├── cogamer_policy.py          # CvCPolicy + CvCPolicyImpl + CvCAgentState + LLM brain
-├── programs.py                # Flat program table (all 32 programs for PCO)
+├── programs.py                # Flat program table (all 32 programs)
 ├── game_state.py              # GameState adapter wrapping CogletAgentPolicy
-├── learner.py                 # CvCLearner (LLM proposes program patches between episodes)
 └── agent/
     ├── __init__.py            # Barrel file re-exporting all submodules
     ├── main.py                # CvcEngine (heuristic decision tree)
@@ -155,9 +154,6 @@ The LLM never picks individual actions — Python handles all real-time decision
 - Receives: `{"resource_bias": "...", "role": null|"...", "objective": null|"...", "analysis": "..."}`
 - Latency ~2s per call, interval adapts: shrinks if <2s, grows if >5s
 - 8 agents × ~20 calls = ~160 API calls per game (consider cost)
-
-### PCO Learning (Between Episodes)
-`CvCLearner` uses an LLM to propose patches to the program table based on loss signals from evaluation. It can modify any program's Python source or the `analyze` prompt itself. Patches are compiled via `exec()`, validated by constraints, and swapped in for the next episode.
 
 ### Decision Pipeline (`decisions.py`)
 The decision tree is a composable pipeline of check functions. Each check takes `(TickContext, role, engine)` and returns `(Action, summary)` or `None`. First non-None wins:

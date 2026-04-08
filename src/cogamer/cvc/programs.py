@@ -1,11 +1,8 @@
 """Flat program table: all CvC programs in one dict, operating on GameState.
 
-Every program is evolvable by PCO. Programs read from / write to GameState
-(from cogamer.cvc.game_state), which delegates to the engine's A* pathfinding and
-role logic. The ``all_programs()`` function returns a dict[str, Program]
-with query, action, and decision programs.
-
-``seed_programs()`` is kept as a backward-compat alias.
+Programs read from / write to GameState (from cogamer.cvc.game_state), which
+delegates to the engine's A* pathfinding and role logic. The ``all_programs()``
+function returns a dict[str, Program] with query, action, and decision programs.
 """
 
 from __future__ import annotations
@@ -153,7 +150,7 @@ def _desired_role(gs: Any) -> str:
 def _should_retreat(gs: Any) -> bool:
     if gs.should_retreat():
         return True
-    # PCO: extra caution when low HP and far from hub
+    # Extra caution when low HP and far from hub
     if gs.hp < 60:
         hub = gs.nearest_hub()
         if hub is not None and manhattan(gs.position, hub.position) > 25:
@@ -186,7 +183,7 @@ def _step(gs: Any) -> tuple[Action, str]:
 
 
 def _summarize(gs: Any) -> dict:
-    """Experience snapshot for PCO learner and LLM analysis."""
+    """Experience snapshot for LLM analysis."""
     hp = gs.hp
     pos = gs.position
     hub = gs.nearest_hub()
@@ -288,7 +285,7 @@ def _parse_analysis(text: str) -> dict:
 
 
 def all_programs() -> dict[str, Program]:
-    """Return the flat program table — all programs evolvable by PCO."""
+    """Return the flat program table."""
     return {
         # Query programs
         "hp": Program(executor="code", fn=_hp),
@@ -335,7 +332,3 @@ def all_programs() -> dict[str, Program]:
             },
         ),
     }
-
-
-# Backward compatibility alias
-seed_programs = all_programs

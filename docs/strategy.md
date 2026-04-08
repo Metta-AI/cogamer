@@ -13,7 +13,6 @@
 - **LLM stagnation detection**: Use LLM to detect when agents are stuck and adjust directives
 - Dynamic role switching based on game state
 - Better junction discovery — agents miss junctions behind walls
-- PCO evolution — run more epochs to evolve program table
 - Read teammate vibes for coordination
 - Study opponent replays via `cogames match-artifacts <id>` for new strategies
 

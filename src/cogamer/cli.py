@@ -34,12 +34,15 @@ from rich.table import Table
 
 console = Console()
 
-PROD_API_URL = "https://api.softmax-cogamers.com"
+PROD_API_URL = "https://api.softmax-cogents.com"
 LOCAL_API_URL = "http://localhost:8000"
 PID_FILE = Path.home() / ".cogamer" / "api.pid"
 LOG_FILE = Path.home() / ".cogamer" / "api.log"
 
 _api_server: str = "prod"  # set by --api-server flag
+_verbose: bool = "--verbose" in sys.argv
+if _verbose:
+    sys.argv = [a for a in sys.argv if a != "--verbose"]
 
 
 # --- HTTP helpers ---
@@ -48,7 +51,13 @@ _api_server: str = "prod"  # set by --api-server flag
 def _api_url() -> str:
     if env := os.environ.get("COGAMER_API_URL"):
         return env
-    return LOCAL_API_URL if _api_server == "local" else PROD_API_URL
+    if _api_server == "prod":
+        return PROD_API_URL
+    # Custom server (e.g. localhost:8000)
+    server = _api_server
+    if not server.startswith("http"):
+        server = f"http://{server}"
+    return server
 
 
 def _headers() -> dict[str, str]:
@@ -63,32 +72,56 @@ def _url(path: str) -> str:
     return f"{_api_url()}{path}"
 
 
+def _request(method: str, url: str, **kw: object) -> httpx.Response:
+    """Send an HTTP request with auth headers and friendly error handling."""
+    from urllib.parse import urlparse
+
+    h = dict(kw.pop("headers", {}))  # type: ignore[arg-type]
+    h.update(_headers())
+    kw["headers"] = h  # type: ignore[assignment]
+    kw.setdefault("timeout", 30.0)  # type: ignore[arg-type]
+
+    try:
+        return getattr(httpx, method)(url, **kw)
+    except httpx.ConnectError as exc:
+        host = urlparse(url).hostname or url
+        console.print(f"[red]Could not reach {host} — use --verbose for details[/red]")
+        if _verbose:
+            console.print(f"[dim]{exc}[/dim]")
+        raise SystemExit(1) from None
+
+
+def _check(resp: httpx.Response) -> None:
+    """Call instead of _check(resp) for friendly error output."""
+    if resp.is_error:
+        from urllib.parse import urlparse
+
+        url = str(resp.request.url)
+        host = urlparse(url).hostname or url
+        console.print(f"[red]{resp.status_code} from {host}{urlparse(url).path} — use --verbose for details[/red]")
+        if _verbose:
+            console.print(f"[dim]{resp.text}[/dim]")
+        raise SystemExit(1)
+
+
 class _api:
     """Thin wrapper around httpx that injects Authorization Bearer token on every request."""
 
     @staticmethod
-    def _kw(kwargs: dict) -> dict:
-        h = kwargs.pop("headers", {})
-        h.update(_headers())
-        kwargs["headers"] = h
-        kwargs.setdefault("timeout", 30.0)
-        return kwargs
-
-    @staticmethod
     def get(url: str, **kw: object) -> httpx.Response:
-        return httpx.get(url, **_api._kw(kw))  # type: ignore[arg-type]
+        return _request("get", url, **kw)
 
     @staticmethod
     def post(url: str, **kw: object) -> httpx.Response:
-        return httpx.post(url, **_api._kw(kw))  # type: ignore[arg-type]
+        return _request("post", url, **kw)
 
     @staticmethod
     def put(url: str, **kw: object) -> httpx.Response:
-        return httpx.put(url, **_api._kw(kw))  # type: ignore[arg-type]
+        return _request("put", url, **kw)
 
     @staticmethod
     def delete(url: str, **kw: object) -> httpx.Response:
-        return httpx.delete(url, **_api._kw(kw))  # type: ignore[arg-type]
+        return _request("delete", url, **kw)
 
 
 # --- Utility functions ---
@@ -119,7 +152,7 @@ def _get_cogamer_ip(name: str) -> str:
     if resp.status_code == 404:
         console.print(f"[red]cogamer '{name}' not found[/red]")
         sys.exit(1)
-    resp.raise_for_status()
+    _check(resp)
     data = resp.json()
     public_ip = data.get("public_ip")
     if not public_ip:
@@ -221,7 +254,7 @@ class CogamerCLI(click.Group):
 
 
 @click.group(cls=CogamerCLI)
-@click.option("--api-server", type=click.Choice(["prod", "local"]), default="prod", help="API server to use")
+@click.option("--api-server", default="prod", help="API server: 'prod' or host:port (e.g. localhost:8000)")
 def main(api_server: str) -> None:
     """Cogamer — lightweight Claude Code agent platform."""
     global _api_server
@@ -236,7 +269,7 @@ def main(api_server: str) -> None:
 def list_cmd(show_all: bool) -> None:
     """List cogamers."""
     resp = _api.get(_url("/cogamers"), params={"all": show_all})
-    resp.raise_for_status()
+    _check(resp)
     cogamers = resp.json()
     if not cogamers:
         console.print("[dim]No cogamers running[/dim]")
@@ -316,11 +349,20 @@ def api_start(host: str, port: int) -> None:
     PID_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(LOG_FILE, "a") as log:
         proc = subprocess.Popen(
-            [sys.executable, "-m", "uvicorn", "cogamer.api.app:app", "--host", host, "--port", str(port)],
+            [sys.executable, "-m", "uvicorn", "cogamer_api.api.app:app", "--host", host, "--port", str(port)],
             stdout=log,
             stderr=log,
             start_new_session=True,
         )
+    # Wait briefly to detect immediate crashes (e.g. port already in use)
+    import time
+
+    time.sleep(0.5)
+    if proc.poll() is not None:
+        PID_FILE.unlink(missing_ok=True)
+        console.print(f"[red]API failed to start (exit code {proc.returncode})[/red]")
+        console.print(f"[dim]Check logs: {LOG_FILE}[/dim]")
+        raise SystemExit(1)
     PID_FILE.write_text(str(proc.pid))
     console.print(f"[green]API started on {host}:{port} (pid {proc.pid})[/green]")
     console.print(f"[dim]Logs: {LOG_FILE}[/dim]")
@@ -351,12 +393,22 @@ def api_restart(ctx: click.Context, host: str, port: int) -> None:
 
 @api.command("status")
 def api_status() -> None:
-    """Check if the API server is running."""
+    """Check API server health."""
+    # Check local dev server if one is running
     pid = _read_pid()
     if pid:
-        console.print(f"[green]API running (pid {pid})[/green]")
-    else:
-        console.print("[dim]API not running[/dim]")
+        console.print(f"[green]Local dev server running (pid {pid})[/green]")
+
+    # Check the configured API endpoint
+    url = _api_url()
+    try:
+        resp = httpx.get(f"{url}/docs", timeout=5.0)
+        console.print(f"[green]{url} reachable ({resp.status_code})[/green]")
+    except httpx.ConnectError:
+        from urllib.parse import urlparse
+
+        host = urlparse(url).hostname or url
+        console.print(f"[red]{host} not reachable[/red]")
 
 
 @api.command("update")
@@ -364,7 +416,7 @@ def api_update() -> None:
     """Trigger API rebuild and deploy via GitHub Actions."""
     console.print("[dim]Triggering deploy-api workflow...[/dim]")
     result = subprocess.run(
-        ["gh", "workflow", "run", "deploy-api.yml", "--repo", "Metta-AI/cogamer"],
+        ["gh", "workflow", "run", "cogamer-api-build-image.yml", "--repo", "Metta-AI/metta"],
         capture_output=True,
         text=True,
     )
@@ -382,9 +434,9 @@ def api_update() -> None:
             "run",
             "list",
             "--repo",
-            "Metta-AI/cogamer",
+            "Metta-AI/metta",
             "--workflow",
-            "deploy-api.yml",
+            "cogamer-api-build-image.yml",
             "--limit",
             "1",
             "--json",
@@ -404,7 +456,7 @@ def api_update() -> None:
 
     run_id = runs[0]["databaseId"]
     console.print(f"[dim]Watching run {run_id}...[/dim]")
-    result = subprocess.run(["gh", "run", "watch", str(run_id), "--repo", "Metta-AI/cogamer"])
+    result = subprocess.run(["gh", "run", "watch", str(run_id), "--repo", "Metta-AI/metta"])
     if result.returncode == 0:
         console.print("[green]API deployed[/green]")
 
@@ -431,7 +483,7 @@ def create(ctx: click.Context) -> None:
     if resp.status_code == 409:
         console.print(f"[red]cogamer '{name}' already exists[/red]")
         sys.exit(1)
-    resp.raise_for_status()
+    _check(resp)
     data = resp.json()
     console.print(f"[green]Created cogamer '{data['name']}' — status: {data['status']}[/green]")
     console.print(f"[dim]Repo: {data.get('codebase', '')}[/dim]")
@@ -449,7 +501,7 @@ def status(ctx: click.Context) -> None:
     if resp.status_code == 404:
         console.print(f"[red]cogamer '{name}' not found[/red]")
         sys.exit(1)
-    resp.raise_for_status()
+    _check(resp)
     data = resp.json()
     from rich.box import ROUNDED
     from rich.panel import Panel
@@ -532,7 +584,7 @@ def token(ctx: click.Context) -> None:
     if resp.status_code == 404:
         console.print(f"[red]cogamer '{name}' not found[/red]")
         sys.exit(1)
-    resp.raise_for_status()
+    _check(resp)
     console.print(resp.json()["token"])
 
 
@@ -542,7 +594,7 @@ def stop(ctx: click.Context) -> None:
     """Stop a running cogamer."""
     name = _name(ctx)
     resp = _api.delete(_url(f"/cogamers/{name}"))
-    resp.raise_for_status()
+    _check(resp)
     console.print(f"[yellow]Stopped cogamer '{name}'[/yellow]")
 
 
@@ -560,12 +612,12 @@ def delete(ctx: click.Context, secrets: bool, config: bool, yes: bool) -> None:
     if secrets:
         resp = _api.delete(_url(f"/cogamers/{name}/secrets"))
         if resp.status_code != 404:
-            resp.raise_for_status()
+            _check(resp)
             console.print(f"[yellow]Deleted secrets for '{name}'[/yellow]")
     if config:
         resp = _api.delete(_url(f"/cogamers/{name}/config"))
         if resp.status_code != 404:
-            resp.raise_for_status()
+            _check(resp)
             console.print(f"[yellow]Deleted config for '{name}'[/yellow]")
     # Clean up Cloudflare tunnel
     from cogamer.tunnel import delete_tunnel, has_cloudflare_creds
@@ -581,7 +633,7 @@ def delete(ctx: click.Context, secrets: bool, config: bool, yes: bool) -> None:
     if resp.status_code == 404:
         console.print(f"[red]cogamer '{name}' not found[/red]")
         sys.exit(1)
-    resp.raise_for_status()
+    _check(resp)
     console.print(f"[yellow]Deleted cogamer '{name}'[/yellow]")
 
 
@@ -591,7 +643,7 @@ def restart(ctx: click.Context) -> None:
     """Restart a cogamer."""
     name = _name(ctx)
     resp = _api.post(_url(f"/cogamers/{name}/restart"))
-    resp.raise_for_status()
+    _check(resp)
     console.print(f"[green]Restarted cogamer '{name}'[/green]")
 
 
@@ -632,7 +684,7 @@ def send(ctx: click.Context, message: str, async_mode: bool, timeout: int, follo
     """Send a message to a cogamer."""
     name = _name(ctx)
     resp = _api.post(_url(f"/cogamers/{name}/send"), json={"message": message})
-    resp.raise_for_status()
+    _check(resp)
     channel_id = resp.json()["channel_id"]
 
     if async_mode:
@@ -648,7 +700,7 @@ def send(ctx: click.Context, message: str, async_mode: bool, timeout: int, follo
             raise SystemExit(1)
         params = {"after": last_ts} if last_ts else {}
         resp = _api.get(_url(f"/cogamers/{name}/recv/{channel_id}"), params=params)
-        resp.raise_for_status()
+        _check(resp)
         msgs = resp.json()["messages"]
         for msg in msgs:
             if msg["sender"] != "cli":
@@ -673,7 +725,7 @@ def secret_list(ctx: click.Context) -> None:
     """List secret keys."""
     name = _name(ctx.parent)  # type: ignore[arg-type]
     resp = _api.get(_url(f"/cogamers/{name}/secrets"))
-    resp.raise_for_status()
+    _check(resp)
     keys = resp.json().get("keys", [])
     if not keys:
         console.print("[dim]No secrets set[/dim]")
@@ -689,7 +741,7 @@ def secret_get(ctx: click.Context, key: str) -> None:
     """Get a secret value."""
     name = _name(ctx.parent)  # type: ignore[arg-type]
     resp = _api.get(_url(f"/cogamers/{name}/secrets/{key}"))
-    resp.raise_for_status()
+    _check(resp)
     console.print(resp.json().get("value", ""))
 
 
@@ -707,7 +759,7 @@ def secret_set(ctx: click.Context, pairs: tuple[str, ...]) -> None:
         k, v = pair.split("=", 1)
         secrets[k] = v
     resp = _api.put(_url(f"/cogamers/{name}/secrets"), json={"secrets": secrets})
-    resp.raise_for_status()
+    _check(resp)
     console.print("[green]Secrets updated[/green]")
 
 
@@ -743,17 +795,17 @@ def config(ctx: click.Context, pairs: tuple[str, ...]) -> None:
                 cfg[k] = v
         if cfg:
             resp = _api.put(_url(f"/cogamers/{name}/config"), json={"config": cfg})
-            resp.raise_for_status()
+            _check(resp)
             console.print("[green]Config updated[/green]")
         if mcp:
             resp = _api.put(_url(f"/cogamers/{name}/mcp"), json={"mcp_servers": mcp})
-            resp.raise_for_status()
+            _check(resp)
             console.print(f"[green]MCP servers updated: {', '.join(mcp.keys())}[/green]")
             console.print("[dim]Restart to apply[/dim]")
         if mcp_removes:
             # Fetch current, remove keys, overwrite
             resp = _api.get(_url(f"/cogamers/{name}"))
-            resp.raise_for_status()
+            _check(resp)
             current = resp.json().get("mcp_servers", {})
             for rm in mcp_removes:
                 current.pop(rm, None)
@@ -762,7 +814,7 @@ def config(ctx: click.Context, pairs: tuple[str, ...]) -> None:
             console.print("[yellow]MCP server removal requires restart to take effect[/yellow]")
     else:
         resp = _api.get(_url(f"/cogamers/{name}"))
-        resp.raise_for_status()
+        _check(resp)
         data = resp.json()
         cfg_data = data.get("config", {})
         mcp_data = data.get("mcp_servers", {})
@@ -792,7 +844,7 @@ def pull(ctx: click.Context, upstream: bool) -> None:
     if upstream:
         # Get the cogbase repo from the codebase URL
         resp = _api.get(_url(f"/cogamers/{name}"))
-        resp.raise_for_status()
+        _check(resp)
         codebase = resp.json().get("codebase", "")
         # git@github.com:user/repo.git -> user/repo
         repo = codebase.replace("git@github.com:", "").replace(".git", "")
@@ -848,7 +900,7 @@ def logs(ctx: click.Context, since: str, max_lines: int) -> None:
     """Show CloudWatch logs for the cogamer."""
     name = _name(ctx)
     resp = _api.get(_url(f"/cogamers/{name}"))
-    resp.raise_for_status()
+    _check(resp)
     data = resp.json()
 
     task_arn = data.get("ecs_task_arn")
@@ -858,7 +910,7 @@ def logs(ctx: click.Context, since: str, max_lines: int) -> None:
     task_id = task_arn.rsplit("/", 1)[-1]
     log_stream = f"cogamer/cogamer/{task_id}"
 
-    from cogamer.config import get_aws_session
+    from cogamer_api.config import get_aws_session
 
     session = get_aws_session()
     client = session.client("logs", region_name="us-east-1")

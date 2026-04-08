@@ -10,8 +10,8 @@ import subprocess
 import sys
 import time
 
-from cogamer.db import CogamerDB
-from cogamer.secrets import CogamerSecrets
+from cogamer_api.db import CogamerDB
+from cogamer_api.secrets import CogamerSecrets
 
 
 def _render_template(template_name: str, variables: dict[str, str], repo_dir: str | None = None) -> str:
@@ -314,7 +314,7 @@ def main() -> None:
     # 6. Start local API server (so MCP plugin can reach it at localhost:8000)
     print("[cogamer] Starting local API server...")
     subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "cogamer.api.app:app", "--host", "127.0.0.1", "--port", "8000"],
+        [sys.executable, "-m", "uvicorn", "cogamer_api.api.app:app", "--host", "127.0.0.1", "--port", "8000"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )

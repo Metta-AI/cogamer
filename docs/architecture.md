@@ -41,7 +41,7 @@ Between these calls, Python runs autonomously using whatever knob values were la
 
 ## Program Table (`programs.py`)
 
-31 code programs + 1 LLM program, all evolvable by PCO:
+31 code programs + 1 LLM program:
 
 | Category | Programs | What they do |
 |----------|----------|-------------|
@@ -58,7 +58,7 @@ Between these calls, Python runs autonomously using whatever knob values were la
    hub_camp_heal → early_retreat → wipeout_recovery → retreat → oscillation_unstick → stall_unstick → emergency_mine → gear_delay → gear_acquisition → **role_dispatch** → explore
 4. `finalize_step()` → record navigation observation
 5. Every ~500 steps: `analyze` LLM program → update `resource_bias`
-6. Every ~500 steps: `summarize` program → collect experience snapshot for PCO
+6. Every ~500 steps: `summarize` program → collect experience snapshot
 
 ## Key Files
 
@@ -81,36 +81,6 @@ Between these calls, Python runs autonomously using whatever knob values were la
 - `resources.py` — resource/inventory queries
 - `geometry.py` — Manhattan distance, position helpers
 - `world_model.py` — WorldModel (per-agent entity memory)
-
-**PCO** (`src/cogamer/cvc/`) — the optimization loop:
-- `pco_runner.py` — `run_pco_epoch()` orchestrator
-- `learner.py` — CvCLearner (LLM proposes program patches)
-- `critic.py` — CvCCritic (evaluates experience)
-- `losses.py` — ResourceLoss, JunctionLoss, SurvivalLoss
-- `constraints.py` — SyntaxConstraint, SafetyConstraint
-
-## PCO (Program Conditioned Optimization)
-
-PCO evolves the program table between episodes. The CvCLearner sees all 32 program source codes + game experience, and proposes patches as `{"program_name": {"type": "code", "source": "def ..."}}`. Patches are validated by SyntaxConstraint + SafetyConstraint before acceptance.
-
-```python
-import asyncio, json, glob, anthropic
-from cvc.pco_runner import run_pco_epoch
-from cvc.programs import all_programs
-
-f = glob.glob('/tmp/coglet_learnings/*.json')[0]
-experience = json.load(open(f))['snapshots']
-
-result = asyncio.run(run_pco_epoch(
-    experience=experience,
-    programs=all_programs(),
-    client=anthropic.Anthropic(),
-    max_retries=2,
-))
-# result = {"accepted": bool, "signals": [...], "patch": {...}}
-```
-
-Valid GameState API for patches: `gs.hp`, `gs.position`, `gs.step_index`, `gs.role`, `gs.nearest_hub()`, `gs.known_junctions(pred)`, `gs.should_retreat()`, `gs.choose_action(role)`, `gs.miner_action()`, `gs.aligner_action()`, `gs.scrambler_action()`, `gs.move_to_known(entity)`, `gs.explore(role)`, `gs.has_role_gear(role)`, `gs.needs_emergency_mining()`, `gs.team_id()`
 
 ## Reference: alpha.0 (tournament rival)
 

@@ -272,7 +272,7 @@ class CvCPolicy(MultiAgentPolicy):
         return self._agent_policies[agent_id]
 
     def collect_experience(self) -> list[dict]:
-        """Collect experience from all agents for PCO."""
+        """Collect experience from all agents."""
         all_exp: list[dict] = []
         for _aid, wrapper in self._agent_policies.items():
             st: CvCAgentState | None = getattr(wrapper, "_state", None)

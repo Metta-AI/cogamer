@@ -39,7 +39,7 @@ Memory lives in `memory/` (repo root). See `memory/memory.md` for what to rememb
 
 1. **Setup cogames** — Run `cogamer/skills/cogames.md` to install dependencies, verify CLI, and authenticate.
 
-2. **Read approach state** — Read `cogamer/state.json` to understand PCO vs design attempt history.
+2. **Read approach state** — Read `cogamer/state.json` to understand attempt history.
 
 3. **Check tournament standing** — Read your cogamer name from `cogamer/IDENTITY.md` (the `# heading`), then run:
    ```bash

@@ -10,15 +10,7 @@ Autonomous Claude Code agents for CoGames. Merged from the cogent + cogamer repo
 
 ## Architecture
 
-- **Platform layer** (`src/cogamer/`): cli, api, db, ecs, channel — manages agent lifecycle
+- **CLI** (`src/cogamer/cli.py`): `cogamer` command-line tool
 - **Game layer** (`src/cogamer/cvc/`): Claude-vs-Claude game orchestration
-- **PCO optimization** (`src/cogamer/pco/`): policy optimization via PCO
-
-## Key details
-
-- Config location: `~/.cogamer/config.yaml`
-- Token prefix: `cgm_`
-- Naming convention: everything is "cogamer", never "cogent"
-- Models are in `src/cogamer/models.py`
-- API routes in `src/cogamer/api/routes.py`, app factory in `src/cogamer/api/app.py`
-- Auth via `src/cogamer/auth.py` (softmax tokens + per-cogamer tokens)
+- **Agent runtime** (`src/cogamer/entrypoint.py`): container entrypoint
+- **API/platform** lives in `packages/cogamer-api` (separate package)

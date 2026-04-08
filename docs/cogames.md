@@ -84,4 +84,4 @@ Tournament format: multi-stage elimination. Policies qualify via self-play, get 
 
 ## Learnings & Experience
 
-Games write experience to `/tmp/coglet_learnings/{game_id}.json` containing snapshots, LLM logs, and per-agent state. Use these for PCO epochs.
+Games write experience to `/tmp/coglet_learnings/{game_id}.json` containing snapshots, LLM logs, and per-agent state.
