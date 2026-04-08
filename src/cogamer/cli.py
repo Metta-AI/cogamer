@@ -516,6 +516,27 @@ def create(ctx: click.Context) -> None:
 
 
 @_cogamer_commands.command()
+@click.argument("path", required=False)
+@click.pass_context
+def clone(ctx: click.Context, path: str | None) -> None:
+    """Clone this cogamer's repo locally."""
+    name = _name(ctx)
+    resp = _api.get(_url(f"/cogamers/{name}"))
+    if resp.status_code == 404:
+        console.print(f"[red]cogamer '{name}' not found[/red]")
+        sys.exit(1)
+    _check(resp)
+    codebase = resp.json().get("codebase", "")
+    if not codebase:
+        console.print(f"[red]cogamer '{name}' has no codebase URL[/red]")
+        sys.exit(1)
+    dest = path or name
+    console.print(f"[dim]Cloning {codebase} → {dest}[/dim]")
+    subprocess.run(["git", "clone", codebase, dest], check=True)
+    console.print(f"[green]Cloned to {dest}[/green]")
+
+
+@_cogamer_commands.command()
 @click.pass_context
 def status(ctx: click.Context) -> None:
     """Show cogamer info."""
