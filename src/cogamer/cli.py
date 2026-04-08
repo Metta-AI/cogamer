@@ -417,7 +417,7 @@ def api_status() -> None:
     # Check the configured API endpoint
     url = _api_url()
     try:
-        resp = httpx.get(f"{url}/status", timeout=5.0)
+        resp = httpx.get(f"{url}/status", timeout=30.0)
         if resp.status_code == 200:
             data = resp.json()
             commit = data.get("git_commit", "unknown")
@@ -427,10 +427,11 @@ def api_status() -> None:
             console.print(f"  uptime: {_format_elapsed_seconds(uptime)}")
         else:
             console.print(f"[green]{url} reachable ({resp.status_code})[/green]")
-    except httpx.ConnectError:
+    except (httpx.ConnectError, httpx.ReadTimeout) as exc:
         from urllib.parse import urlparse
 
         host = urlparse(url).hostname or url
+        label = "timed out" if isinstance(exc, httpx.ReadTimeout) else "not reachable"
         console.print(f"[red]{host} not reachable[/red]")
 
 
