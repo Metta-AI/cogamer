@@ -1,0 +1,6 @@
+FROM public.ecr.aws/lambda/python:3.12
+
+COPY . /tmp/cogamer
+RUN pip install /tmp/cogamer && rm -rf /tmp/cogamer
+
+CMD ["cogamer.api.lambda_handler.handler"]
