@@ -437,6 +437,17 @@ def api_status() -> None:
 @api.command("update")
 def api_update() -> None:
     """Trigger API rebuild and deploy via GitHub Actions."""
+    # Show what's being deployed
+    result = subprocess.run(
+        [
+            "gh", "api", "repos/Metta-AI/metta/commits/main",
+            "--jq", '.sha[:12] + " " + (.commit.message | split("\\n")[0])',
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        console.print(f"[bold]Deploying:[/bold] {result.stdout.strip()}")
     console.print("[dim]Triggering deploy-api workflow...[/dim]")
     result = subprocess.run(
         ["gh", "workflow", "run", "cogamer-api-build-image.yml", "--repo", "Metta-AI/metta"],
