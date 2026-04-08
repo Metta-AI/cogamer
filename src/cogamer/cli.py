@@ -768,11 +768,48 @@ def config_mcp(ctx: click.Context, pairs: tuple[str, ...]) -> None:
 @click.argument("channel", required=False, default="default")
 @click.pass_context
 def io(ctx: click.Context, channel: str) -> None:
-    """Channel-based messaging. Usage: io [channel] read|write"""
+    """Channel-based messaging. Usage: io [channel] create|list|delete|read|write"""
     ctx.ensure_object(dict)
     ctx.obj["io_channel"] = channel
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
+
+
+@io.command("create")
+@click.pass_context
+def io_create(ctx: click.Context) -> None:
+    """Create a channel."""
+    name = _name(ctx.parent.parent)  # type: ignore[arg-type]
+    channel = ctx.parent.obj["io_channel"]  # type: ignore[union-attr]
+    resp = _api.post(_url(f"/cogamer/{name}/io/{channel}"))
+    _check(resp)
+    console.print(f"[green]Channel '{channel}' created[/green]")
+
+
+@io.command("list")
+@click.pass_context
+def io_list(ctx: click.Context) -> None:
+    """List channels."""
+    name = _name(ctx.parent.parent)  # type: ignore[arg-type]
+    resp = _api.get(_url(f"/cogamer/{name}/io"))
+    _check(resp)
+    channels = resp.json()
+    if not channels:
+        console.print("[dim]No channels[/dim]")
+    else:
+        for ch in channels:
+            console.print(f"{ch['channel_id']}  [dim]{ch.get('created_at', '')}[/dim]")
+
+
+@io.command("delete")
+@click.pass_context
+def io_delete(ctx: click.Context) -> None:
+    """Delete a channel and all its messages."""
+    name = _name(ctx.parent.parent)  # type: ignore[arg-type]
+    channel = ctx.parent.obj["io_channel"]  # type: ignore[union-attr]
+    resp = _api.delete(_url(f"/cogamer/{name}/io/{channel}"))
+    _check(resp)
+    console.print(f"[yellow]Channel '{channel}' deleted[/yellow]")
 
 
 @io.command("write")
@@ -782,9 +819,9 @@ def io_write(ctx: click.Context, message: str) -> None:
     """Write a message to a channel."""
     name = _name(ctx.parent.parent)  # type: ignore[arg-type]
     channel = ctx.parent.obj["io_channel"]  # type: ignore[union-attr]
-    resp = _api.post(_url(f"/cogamer/{name}/io/{channel}"), json={"message": message})
+    resp = _api.put(_url(f"/cogamer/{name}/io/{channel}"), json={"message": message})
     _check(resp)
-    console.print(f"[dim]channel: {resp.json()['channel_id']}[/dim]")
+    console.print("[dim]sent[/dim]")
 
 
 @io.command("read")
