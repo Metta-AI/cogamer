@@ -435,25 +435,26 @@ def api_status() -> None:
 
 
 @api.command("update")
-def api_update() -> None:
+@click.option("--branch", default=None, help="Branch to deploy from (default: main)")
+def api_update(branch: str | None) -> None:
     """Trigger API rebuild and deploy via GitHub Actions."""
+    ref = branch or "main"
     # Show what's being deployed
     result = subprocess.run(
         [
-            "gh", "api", "repos/Metta-AI/metta/commits/main",
+            "gh", "api", f"repos/Metta-AI/metta/commits/{ref}",
             "--jq", '.sha[:12] + " " + (.commit.message | split("\\n")[0])',
         ],
         capture_output=True,
         text=True,
     )
     if result.returncode == 0 and result.stdout.strip():
-        console.print(f"[bold]Deploying:[/bold] {result.stdout.strip()}")
+        console.print(f"[bold]Deploying ({ref}):[/bold] {result.stdout.strip()}")
     console.print("[dim]Triggering deploy-api workflow...[/dim]")
-    result = subprocess.run(
-        ["gh", "workflow", "run", "cogamer-api-build-image.yml", "--repo", "Metta-AI/metta"],
-        capture_output=True,
-        text=True,
-    )
+    cmd = ["gh", "workflow", "run", "cogamer-api-build-image.yml", "--repo", "Metta-AI/metta"]
+    if branch:
+        cmd += ["--ref", branch]
+    result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         console.print(f"[red]Failed to trigger workflow: {result.stderr.strip()}[/red]")
         sys.exit(1)
