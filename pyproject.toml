@@ -48,6 +48,6 @@ extend = "../../.ruff.toml"
 "src/cogamer/channel/mcp_server.py" = ["E402"]
 
 [tool.uv.sources]
-cogamer-api = { workspace = true }
-cogames = { workspace = true }
-mettagrid = { workspace = true }
+cogamer-api = {git = "https://github.com/Metta-AI/cogamer-api.git"}
+cogames = {git = "https://github.com/Metta-AI/cogames.git"}
+mettagrid = {git = "https://github.com/Metta-AI/mettagrid.git"}

@@ -173,6 +173,8 @@ def _get_ssh_key_path(name: str) -> str:
         if not ssh_key:
             console.print(f"[red]No SSH key found for '{name}'[/red]")
             sys.exit(1)
+        if not ssh_key.endswith("\n"):
+            ssh_key += "\n"
         key_path.write_text(ssh_key)
         key_path.chmod(0o600)
     return str(key_path)
