@@ -210,6 +210,21 @@ def _format_elapsed(iso_ts: str | None) -> str:
     return " ".join(parts)
 
 
+def _format_elapsed_seconds(total: int) -> str:
+    days, rem = divmod(total, 86400)
+    hours, rem = divmod(rem, 3600)
+    mins, secs = divmod(rem, 60)
+    parts = []
+    if days:
+        parts.append(f"{days}d")
+    if hours:
+        parts.append(f"{hours}h")
+    if mins:
+        parts.append(f"{mins}m")
+    parts.append(f"{secs}s")
+    return " ".join(parts)
+
+
 def _heartbeat_style(iso_ts: str | None) -> str:
     """Return a Rich color based on heartbeat age: green <1m, yellow <5m, red otherwise."""
     secs = _elapsed_seconds(iso_ts)
@@ -402,8 +417,16 @@ def api_status() -> None:
     # Check the configured API endpoint
     url = _api_url()
     try:
-        resp = httpx.get(f"{url}/docs", timeout=5.0)
-        console.print(f"[green]{url} reachable ({resp.status_code})[/green]")
+        resp = httpx.get(f"{url}/status", timeout=5.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            commit = data.get("git_commit", "unknown")
+            uptime = data.get("uptime_seconds", 0)
+            console.print(f"[green]{url} reachable[/green]")
+            console.print(f"  commit: {commit[:12]}")
+            console.print(f"  uptime: {_format_elapsed_seconds(uptime)}")
+        else:
+            console.print(f"[green]{url} reachable ({resp.status_code})[/green]")
     except httpx.ConnectError:
         from urllib.parse import urlparse
 
