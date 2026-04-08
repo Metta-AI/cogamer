@@ -804,25 +804,11 @@ def config_mcp(ctx: click.Context, pairs: tuple[str, ...]) -> None:
 
 
 @_cogamer_commands.group(invoke_without_command=True)
-@click.argument("channel", required=False, default="default")
 @click.pass_context
-def io(ctx: click.Context, channel: str) -> None:
-    """Channel-based messaging. Usage: io [channel] create|list|delete|read|write"""
-    ctx.ensure_object(dict)
-    ctx.obj["io_channel"] = channel
+def io(ctx: click.Context) -> None:
+    """Channel-based messaging. Usage: io list | io <channel> create|delete|read|write"""
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
-
-
-@io.command("create")
-@click.pass_context
-def io_create(ctx: click.Context) -> None:
-    """Create a channel."""
-    name = _name(ctx.parent.parent)  # type: ignore[arg-type]
-    channel = ctx.parent.obj["io_channel"]  # type: ignore[union-attr]
-    resp = _api.post(_url(f"/cogamer/{name}/io/{channel}"))
-    _check(resp)
-    console.print(f"[green]Channel '{channel}' created[/green]")
 
 
 @io.command("list")
@@ -840,38 +826,49 @@ def io_list(ctx: click.Context) -> None:
             console.print(f"{ch['channel_id']}  [dim]{ch.get('created_at', '')}[/dim]")
 
 
-@io.command("delete")
+@io.command("create")
+@click.argument("channel")
 @click.pass_context
-def io_delete(ctx: click.Context) -> None:
+def io_create(ctx: click.Context, channel: str) -> None:
+    """Create a channel."""
+    name = _name(ctx.parent.parent)  # type: ignore[arg-type]
+    resp = _api.post(_url(f"/cogamer/{name}/io/{channel}"))
+    _check(resp)
+    console.print(f"[green]Channel '{channel}' created[/green]")
+
+
+@io.command("delete")
+@click.argument("channel")
+@click.pass_context
+def io_delete(ctx: click.Context, channel: str) -> None:
     """Delete a channel and all its messages."""
     name = _name(ctx.parent.parent)  # type: ignore[arg-type]
-    channel = ctx.parent.obj["io_channel"]  # type: ignore[union-attr]
     resp = _api.delete(_url(f"/cogamer/{name}/io/{channel}"))
     _check(resp)
     console.print(f"[yellow]Channel '{channel}' deleted[/yellow]")
 
 
 @io.command("write")
+@click.argument("channel")
 @click.argument("message")
 @click.pass_context
-def io_write(ctx: click.Context, message: str) -> None:
+def io_write(ctx: click.Context, channel: str, message: str) -> None:
     """Write a message to a channel."""
     name = _name(ctx.parent.parent)  # type: ignore[arg-type]
-    channel = ctx.parent.obj["io_channel"]  # type: ignore[union-attr]
     resp = _api.put(_url(f"/cogamer/{name}/io/{channel}"), json={"message": message})
     _check(resp)
     console.print("[dim]sent[/dim]")
 
 
 @io.command("read")
+@click.argument("channel")
 @click.option("--since", default=None, help="Only messages after this timestamp")
 @click.option("--follow", is_flag=True, help="Keep listening for new messages")
 @click.option("--timeout", default=60, type=int, help="Timeout in seconds (default: 60)")
 @click.pass_context
-def io_read(ctx: click.Context, since: str | None, follow: bool, timeout: int) -> None:
+def io_read(ctx: click.Context, channel: str, since: str | None, follow: bool, timeout: int) -> None:
     """Read messages from a channel."""
     name = _name(ctx.parent.parent)  # type: ignore[arg-type]
-    channel = ctx.parent.obj["io_channel"]  # type: ignore[union-attr]
 
     last_ts = since
     deadline = time.monotonic() + timeout
