@@ -161,22 +161,48 @@ def _get_cogamer_ip(name: str) -> str:
     return public_ip
 
 
-def _ssh_run(ip: str, cmd: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [
+def _get_ssh_key_path(name: str) -> str:
+    """Fetch the cogamer's SSH key via API and cache it locally."""
+    key_dir = Path.home() / ".cogamer" / "keys"
+    key_dir.mkdir(parents=True, exist_ok=True)
+    key_path = key_dir / f"{name}.pem"
+    if not key_path.exists():
+        resp = _api.get(_url(f"/cogamer/{name}/config/GIT_SSH_KEY?secret=true"))
+        _check(resp)
+        ssh_key = resp.json().get("value", "")
+        if not ssh_key:
+            console.print(f"[red]No SSH key found for '{name}'[/red]")
+            sys.exit(1)
+        key_path.write_text(ssh_key)
+        key_path.chmod(0o600)
+    return str(key_path)
+
+
+def _ssh_args(ip: str, name: str) -> list[str]:
+    """Common SSH arguments for connecting to a cogamer."""
+    key_path = _get_ssh_key_path(name)
+    return [
+        "ssh",
+        "-i", key_path,
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "UserKnownHostsFile=/dev/null",
+        "-o", "LogLevel=ERROR",
+        f"cogamer@{ip}",
+    ]
+
+
+def _ssh_run(ip: str, cmd: str, name: str | None = None) -> subprocess.CompletedProcess[str]:
+    if name:
+        base = _ssh_args(ip, name)
+    else:
+        base = [
             "ssh",
-            "-o",
-            "StrictHostKeyChecking=no",
-            "-o",
-            "UserKnownHostsFile=/dev/null",
-            "-o",
-            "LogLevel=ERROR",
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=/dev/null",
+            "-o", "LogLevel=ERROR",
             f"cogamer@{ip}",
-            cmd,
-        ],
-        capture_output=True,
-        text=True,
-    )
+        ]
+    return subprocess.run(base + [cmd], capture_output=True, text=True)
 
 
 def _elapsed_seconds(iso_ts: str | None) -> int | None:
@@ -431,8 +457,8 @@ def api_status() -> None:
         from urllib.parse import urlparse
 
         host = urlparse(url).hostname or url
-        label = "timed out" if isinstance(exc, httpx.ReadTimeout) else "not reachable"
-        console.print(f"[red]{host} not reachable[/red]")
+        msg = "timed out" if isinstance(exc, httpx.ReadTimeout) else "not reachable"
+        console.print(f"[red]{host} {msg}[/red]")
 
 
 @api.command("update")
@@ -888,19 +914,7 @@ def ctl_ssh(ctx: click.Context, iterm: bool) -> None:
         console.print("[red]--iterm requires running inside iTerm2[/red]")
         sys.exit(1)
     ip = _get_cogamer_ip(name)
-    ssh_base = [
-        "ssh",
-        "-t",
-        "-o",
-        "StrictHostKeyChecking=no",
-        "-o",
-        "UserKnownHostsFile=/dev/null",
-        "-o",
-        "LogLevel=ERROR",
-        "-o",
-        "SetEnv=TERM=xterm-256color",
-        f"cogamer@{ip}",
-    ]
+    ssh_base = _ssh_args(ip, name) + ["-t", "-o", "SetEnv=TERM=xterm-256color"]
     tmux_cmd = "tmux -CC attach -t main" if iterm else "tmux attach -t main"
     os.execvp("ssh", ssh_base + [tmux_cmd])
 
@@ -912,7 +926,7 @@ def ctl_exec(ctx: click.Context, command: str) -> None:
     """Run a command on the cogamer via SSH."""
     name = _name(ctx.parent.parent)  # type: ignore[arg-type]
     ip = _get_cogamer_ip(name)
-    result = _ssh_run(ip, command)
+    result = _ssh_run(ip, command, name=name)
     if result.stdout:
         console.print(result.stdout.rstrip())
     if result.returncode != 0 and result.stderr:
@@ -969,7 +983,7 @@ def ctl_pull(ctx: click.Context, upstream: bool) -> None:
 
     ip = _get_cogamer_ip(name)
     console.print("[dim]Merging main into working branch...[/dim]")
-    result = _ssh_run(ip, "cd ~/repo && git fetch origin && git merge origin/main --no-edit")
+    result = _ssh_run(ip, "cd ~/repo && git fetch origin && git merge origin/main --no-edit", name=name)
     if result.returncode == 0:
         console.print(f"[green]{result.stdout.strip()}[/green]")
     else:
@@ -985,7 +999,7 @@ def ctl_wipe(ctx: click.Context, full: bool) -> None:
     ip = _get_cogamer_ip(name)
     claude_target = ".claude" if full else ".claude/memory"
     wipe_cmd = f"cd ~/repo && rm -rf {claude_target} ; rm -rf memory ; rm -rf runtime"
-    result = _ssh_run(ip, wipe_cmd)
+    result = _ssh_run(ip, wipe_cmd, name=name)
     if result.returncode == 0:
         console.print(f"[green]{claude_target} and memory/ reset[/green]")
     else:
