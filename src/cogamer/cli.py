@@ -145,7 +145,7 @@ def _load_softmax_token() -> str | None:
 
 def _get_cogamer_ip(name: str) -> str:
     try:
-        resp = _api.get(_url(f"/cogamers/{name}"))
+        resp = _api.get(_url(f"/cogamer/{name}"))
     except httpx.ConnectError:
         console.print("[red]API not running — start it with: cogamer api start[/red]")
         sys.exit(1)
@@ -283,7 +283,7 @@ def main(api_server: str) -> None:
 @click.option("--all", "show_all", is_flag=True, help="Include non-running cogamers")
 def list_cmd(show_all: bool) -> None:
     """List cogamers."""
-    resp = _api.get(_url("/cogamers"), params={"all": show_all})
+    resp = _api.get(_url("/cogamer"), params={"all": show_all})
     _check(resp)
     cogamers = resp.json()
     if not cogamers:
@@ -497,12 +497,17 @@ def _name(ctx: click.Context) -> str:
     return ctx.obj["cogamer_name"]
 
 
+# ---------------------------------------------------------------------------
+# Lifecycle (top-level) — create, status, stop, restart, delete
+# ---------------------------------------------------------------------------
+
+
 @_cogamer_commands.command()
 @click.pass_context
 def create(ctx: click.Context) -> None:
-    """Create a new cogamer. Forks softmax-agents/cogamer and launches on ECS."""
+    """Create a new cogamer."""
     name = _name(ctx)
-    resp = _api.post(_url("/cogamers"), json={"name": name})
+    resp = _api.post(_url("/cogamer"), json={"name": name})
     if resp.status_code == 409:
         console.print(f"[red]cogamer '{name}' already exists[/red]")
         sys.exit(1)
@@ -516,32 +521,11 @@ def create(ctx: click.Context) -> None:
 
 
 @_cogamer_commands.command()
-@click.argument("path", required=False)
-@click.pass_context
-def clone(ctx: click.Context, path: str | None) -> None:
-    """Clone this cogamer's repo locally."""
-    name = _name(ctx)
-    resp = _api.get(_url(f"/cogamers/{name}"))
-    if resp.status_code == 404:
-        console.print(f"[red]cogamer '{name}' not found[/red]")
-        sys.exit(1)
-    _check(resp)
-    codebase = resp.json().get("codebase", "")
-    if not codebase:
-        console.print(f"[red]cogamer '{name}' has no codebase URL[/red]")
-        sys.exit(1)
-    dest = path or name
-    console.print(f"[dim]Cloning {codebase} → {dest}[/dim]")
-    subprocess.run(["git", "clone", codebase, dest], check=True)
-    console.print(f"[green]Cloned to {dest}[/green]")
-
-
-@_cogamer_commands.command()
 @click.pass_context
 def status(ctx: click.Context) -> None:
     """Show cogamer info."""
     name = _name(ctx)
-    resp = _api.get(_url(f"/cogamers/{name}"))
+    resp = _api.get(_url(f"/cogamer/{name}"))
     if resp.status_code == 404:
         console.print(f"[red]cogamer '{name}' not found[/red]")
         sys.exit(1)
@@ -550,24 +534,22 @@ def status(ctx: click.Context) -> None:
     from rich.box import ROUNDED
     from rich.panel import Panel
 
-    status = data.get("status", "unknown")
-    status_style = _STATUS_COLORS.get(status, "dim")
+    st = data.get("status", "unknown")
+    status_style = _STATUS_COLORS.get(st, "dim")
 
     def _ts(iso: str | None) -> str:
         if not iso:
             return "-"
         elapsed = _format_elapsed(iso)
-        # Shorten ISO for display
         short = iso
         if "T" in iso:
             short = iso.split("T")[0] + " " + iso.split("T")[1][:8]
         return f"{short}  [dim]({elapsed} ago)[/dim]"
 
-    # Info table
     info = Table(show_header=False, box=None, padding=(0, 1))
     info.add_column(style="dim", min_width=10)
     info.add_column()
-    info.add_row("status", f"[{status_style}]{status}[/{status_style}]")
+    info.add_row("status", f"[{status_style}]{st}[/{status_style}]")
     info.add_row("codebase", data.get("codebase", ""))
     if data.get("public_ip"):
         info.add_row("ip", f"{data['public_ip']}  [dim]({data.get('container_ip', '')})[/dim]")
@@ -589,7 +571,6 @@ def status(ctx: click.Context) -> None:
         info.add_row("heartbeat", hb_line)
     info.add_row("created", _ts(data.get("created_at")))
 
-    # Image info
     image = data.get("image_info") or {}
     if image:
         info.add_row("", "")
@@ -603,7 +584,6 @@ def status(ctx: click.Context) -> None:
 
     console.print(Panel(info, title=f"[bold]{data['name']}[/bold]", box=ROUNDED))
 
-    # Ops log
     ops = data.get("ops_log") or []
     if ops:
         ops_table = Table(box=ROUNDED, padding=(0, 1))
@@ -621,49 +601,39 @@ def status(ctx: click.Context) -> None:
 
 @_cogamer_commands.command()
 @click.pass_context
-def token(ctx: click.Context) -> None:
-    """Show the cogamer's auth token."""
-    name = _name(ctx)
-    resp = _api.get(_url(f"/cogamers/{name}/token"))
-    if resp.status_code == 404:
-        console.print(f"[red]cogamer '{name}' not found[/red]")
-        sys.exit(1)
-    _check(resp)
-    console.print(resp.json()["token"])
-
-
-@_cogamer_commands.command()
-@click.pass_context
 def stop(ctx: click.Context) -> None:
     """Stop a running cogamer."""
     name = _name(ctx)
-    resp = _api.delete(_url(f"/cogamers/{name}"))
+    resp = _api.delete(_url(f"/cogamer/{name}"))
     _check(resp)
     console.print(f"[yellow]Stopped cogamer '{name}'[/yellow]")
 
 
 @_cogamer_commands.command()
+@click.pass_context
+def restart(ctx: click.Context) -> None:
+    """Restart a cogamer."""
+    name = _name(ctx)
+    resp = _api.post(_url(f"/cogamer/{name}/restart"))
+    _check(resp)
+    console.print(f"[green]Restarted cogamer '{name}'[/green]")
+
+
+@_cogamer_commands.command()
 @click.option("--secrets", is_flag=True, help="Also delete secrets")
-@click.option("--config", is_flag=True, help="Also delete config")
 @click.option("-y", "--yes", is_flag=True, help="Skip confirmation")
 @click.pass_context
-def delete(ctx: click.Context, secrets: bool, config: bool, yes: bool) -> None:
+def delete(ctx: click.Context, secrets: bool, yes: bool) -> None:
     """Delete a cogamer record."""
     name = _name(ctx)
     if not yes:
         if not click.confirm(f"Delete cogamer '{name}'?"):
             return
     if secrets:
-        resp = _api.delete(_url(f"/cogamers/{name}/secrets"))
+        resp = _api.delete(_url(f"/cogamer/{name}/config?secret=true"))
         if resp.status_code != 404:
             _check(resp)
             console.print(f"[yellow]Deleted secrets for '{name}'[/yellow]")
-    if config:
-        resp = _api.delete(_url(f"/cogamers/{name}/config"))
-        if resp.status_code != 404:
-            _check(resp)
-            console.print(f"[yellow]Deleted config for '{name}'[/yellow]")
-    # Clean up Cloudflare tunnel
     from cogamer.tunnel import delete_tunnel, has_cloudflare_creds
 
     if has_cloudflare_creds():
@@ -673,7 +643,7 @@ def delete(ctx: click.Context, secrets: bool, config: bool, yes: bool) -> None:
         except Exception as e:
             console.print(f"[yellow]Could not delete Cloudflare tunnel: {e}[/yellow]")
 
-    resp = _api.delete(_url(f"/cogamers/{name}/record"))
+    resp = _api.delete(_url(f"/cogamer/{name}/record"))
     if resp.status_code == 404:
         console.print(f"[red]cogamer '{name}' not found[/red]")
         sys.exit(1)
@@ -681,22 +651,189 @@ def delete(ctx: click.Context, secrets: bool, config: bool, yes: bool) -> None:
     console.print(f"[yellow]Deleted cogamer '{name}'[/yellow]")
 
 
-@_cogamer_commands.command()
+# ---------------------------------------------------------------------------
+# config — get/put/delete config and secrets
+# ---------------------------------------------------------------------------
+
+
+@_cogamer_commands.group(invoke_without_command=True)
 @click.pass_context
-def restart(ctx: click.Context) -> None:
-    """Restart a cogamer."""
-    name = _name(ctx)
-    resp = _api.post(_url(f"/cogamers/{name}/restart"))
+def config(ctx: click.Context) -> None:
+    """Manage config and secrets."""
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+
+
+@config.command("get")
+@click.argument("key", required=False)
+@click.option("--secret", is_flag=True, help="Read from secrets instead of config")
+@click.pass_context
+def config_get(ctx: click.Context, key: str | None, secret: bool) -> None:
+    """Get config or secret values."""
+    name = _name(ctx.parent.parent)  # type: ignore[arg-type]
+    flag = "?secret=true" if secret else ""
+    if key:
+        resp = _api.get(_url(f"/cogamer/{name}/config/{key}{flag}"))
+        _check(resp)
+        console.print(resp.json().get("value", ""))
+    else:
+        resp = _api.get(_url(f"/cogamer/{name}/config{flag}"))
+        _check(resp)
+        data = resp.json()
+        if secret:
+            keys = data.get("keys", [])
+            if not keys:
+                console.print("[dim]No secrets set[/dim]")
+            else:
+                for k in keys:
+                    console.print(k)
+        elif not data:
+            console.print("[dim]No config set[/dim]")
+        else:
+            for k, v in data.items():
+                console.print(f"[bold]{k}:[/bold] {v}")
+
+
+@config.command("put")
+@click.argument("pairs", nargs=-1, required=True)
+@click.option("--secret", is_flag=True, help="Write to secrets instead of config")
+@click.pass_context
+def config_put(ctx: click.Context, pairs: tuple[str, ...], secret: bool) -> None:
+    """Set config or secret values. Usage: config put KEY=VALUE ..."""
+    name = _name(ctx.parent.parent)  # type: ignore[arg-type]
+    kv = {}
+    for pair in pairs:
+        if "=" not in pair:
+            console.print(f"[red]Invalid format: {pair} (expected KEY=VALUE)[/red]")
+            sys.exit(1)
+        k, v = pair.split("=", 1)
+        kv[k] = v
+    flag = "?secret=true" if secret else ""
+    body_key = "secrets" if secret else "config"
+    resp = _api.put(_url(f"/cogamer/{name}/config{flag}"), json={body_key: kv})
     _check(resp)
-    console.print(f"[green]Restarted cogamer '{name}'[/green]")
+    label = "Secrets" if secret else "Config"
+    console.print(f"[green]{label} updated[/green]")
 
 
-@_cogamer_commands.command()
+@config.command("delete")
+@click.argument("key", required=False)
+@click.option("--secret", is_flag=True, help="Delete secrets instead of config")
+@click.pass_context
+def config_delete(ctx: click.Context, key: str | None, secret: bool) -> None:
+    """Delete config or secrets."""
+    name = _name(ctx.parent.parent)  # type: ignore[arg-type]
+    flag = "?secret=true" if secret else ""
+    resp = _api.delete(_url(f"/cogamer/{name}/config{flag}"))
+    _check(resp)
+    label = "Secrets" if secret else "Config"
+    console.print(f"[yellow]{label} deleted[/yellow]")
+
+
+@config.command("mcp")
+@click.argument("pairs", nargs=-1)
+@click.pass_context
+def config_mcp(ctx: click.Context, pairs: tuple[str, ...]) -> None:
+    """Get or set MCP servers. Usage: config mcp name=url ..."""
+    name = _name(ctx.parent.parent)  # type: ignore[arg-type]
+    if not pairs:
+        resp = _api.get(_url(f"/cogamer/{name}"))
+        _check(resp)
+        mcp_data = resp.json().get("mcp_servers", {})
+        if not mcp_data:
+            console.print("[dim]No MCP servers configured[/dim]")
+        else:
+            for k, v in mcp_data.items():
+                console.print(f"[bold]{k}:[/bold] {v}")
+        return
+    mcp = {}
+    for pair in pairs:
+        if "=" not in pair:
+            console.print(f"[red]Invalid format: {pair} (expected name=url)[/red]")
+            sys.exit(1)
+        k, v = pair.split("=", 1)
+        mcp[k] = v
+    resp = _api.put(_url(f"/cogamer/{name}/mcp"), json={"mcp_servers": mcp})
+    _check(resp)
+    console.print(f"[green]MCP servers updated: {', '.join(mcp.keys())}[/green]")
+    console.print("[dim]Restart to apply[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# io — channel-based messaging
+# ---------------------------------------------------------------------------
+
+
+@_cogamer_commands.group(invoke_without_command=True)
+@click.argument("channel", required=False, default="default")
+@click.pass_context
+def io(ctx: click.Context, channel: str) -> None:
+    """Channel-based messaging. Usage: io [channel] read|write"""
+    ctx.ensure_object(dict)
+    ctx.obj["io_channel"] = channel
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+
+
+@io.command("write")
+@click.argument("message")
+@click.pass_context
+def io_write(ctx: click.Context, message: str) -> None:
+    """Write a message to a channel."""
+    name = _name(ctx.parent.parent)  # type: ignore[arg-type]
+    channel = ctx.parent.obj["io_channel"]  # type: ignore[union-attr]
+    resp = _api.post(_url(f"/cogamer/{name}/io/{channel}"), json={"message": message})
+    _check(resp)
+    console.print(f"[dim]channel: {resp.json()['channel_id']}[/dim]")
+
+
+@io.command("read")
+@click.option("--since", default=None, help="Only messages after this timestamp")
+@click.option("--follow", is_flag=True, help="Keep listening for new messages")
+@click.option("--timeout", default=60, type=int, help="Timeout in seconds (default: 60)")
+@click.pass_context
+def io_read(ctx: click.Context, since: str | None, follow: bool, timeout: int) -> None:
+    """Read messages from a channel."""
+    name = _name(ctx.parent.parent)  # type: ignore[arg-type]
+    channel = ctx.parent.obj["io_channel"]  # type: ignore[union-attr]
+
+    last_ts = since
+    deadline = time.monotonic() + timeout
+    while True:
+        params = {"since": last_ts} if last_ts else {}
+        resp = _api.get(_url(f"/cogamer/{name}/io/{channel}"), params=params)
+        _check(resp)
+        msgs = resp.json().get("messages", [])
+        for msg in msgs:
+            console.print(f"[dim]{msg.get('sender', '?')}:[/dim] {msg['body']}")
+            last_ts = msg.get("timestamp")
+        if not follow:
+            return
+        if time.monotonic() >= deadline:
+            console.print(f"[yellow]Timed out after {timeout}s[/yellow]")
+            raise SystemExit(1)
+        time.sleep(2)
+
+
+# ---------------------------------------------------------------------------
+# ctl — ssh, exec, clone, pull, wipe, logs
+# ---------------------------------------------------------------------------
+
+
+@_cogamer_commands.group(invoke_without_command=True)
+@click.pass_context
+def ctl(ctx: click.Context) -> None:
+    """Control commands: ssh, exec, clone, pull, wipe, logs."""
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+
+
+@ctl.command("ssh")
 @click.option("--iterm", is_flag=True, help="Use tmux -CC (iTerm2 native integration)")
 @click.pass_context
-def connect(ctx: click.Context, iterm: bool) -> None:
-    """Connect to a cogamer via SSH."""
-    name = _name(ctx)
+def ctl_ssh(ctx: click.Context, iterm: bool) -> None:
+    """Connect via SSH."""
+    name = _name(ctx.parent.parent)  # type: ignore[arg-type]
     if iterm and os.environ.get("TERM_PROGRAM") != "iTerm.app":
         console.print("[red]--iterm requires running inside iTerm2[/red]")
         sys.exit(1)
@@ -718,181 +855,54 @@ def connect(ctx: click.Context, iterm: bool) -> None:
     os.execvp("ssh", ssh_base + [tmux_cmd])
 
 
-@_cogamer_commands.command()
-@click.argument("message")
-@click.option("--async", "async_mode", is_flag=True, help="Print channel_id and exit")
-@click.option("--timeout", default=60, type=int, help="Timeout in seconds (default: 60)")
-@click.option("--follow", is_flag=True, help="Keep listening for messages instead of exiting after first response")
+@ctl.command("exec")
+@click.argument("command")
 @click.pass_context
-def send(ctx: click.Context, message: str, async_mode: bool, timeout: int, follow: bool) -> None:
-    """Send a message to a cogamer."""
-    name = _name(ctx)
-    resp = _api.post(_url(f"/cogamers/{name}/send"), json={"message": message})
+def ctl_exec(ctx: click.Context, command: str) -> None:
+    """Run a command on the cogamer via SSH."""
+    name = _name(ctx.parent.parent)  # type: ignore[arg-type]
+    ip = _get_cogamer_ip(name)
+    result = _ssh_run(ip, command)
+    if result.stdout:
+        console.print(result.stdout.rstrip())
+    if result.returncode != 0 and result.stderr:
+        console.print(f"[red]{result.stderr.rstrip()}[/red]")
+    raise SystemExit(result.returncode)
+
+
+@ctl.command("clone")
+@click.argument("path", required=False)
+@click.pass_context
+def ctl_clone(ctx: click.Context, path: str | None) -> None:
+    """Clone this cogamer's repo locally."""
+    name = _name(ctx.parent.parent)  # type: ignore[arg-type]
+    resp = _api.get(_url(f"/cogamer/{name}"))
+    if resp.status_code == 404:
+        console.print(f"[red]cogamer '{name}' not found[/red]")
+        sys.exit(1)
     _check(resp)
-    channel_id = resp.json()["channel_id"]
-
-    if async_mode:
-        console.print(channel_id)
-        return
-
-    last_ts = None
-    deadline = time.monotonic() + timeout
-    console.print(f"[dim]channel: {channel_id}[/dim]")
-    while True:
-        if time.monotonic() >= deadline:
-            console.print(f"[yellow]Timed out after {timeout}s[/yellow]")
-            raise SystemExit(1)
-        params = {"after": last_ts} if last_ts else {}
-        resp = _api.get(_url(f"/cogamers/{name}/recv/{channel_id}"), params=params)
-        _check(resp)
-        msgs = resp.json()["messages"]
-        for msg in msgs:
-            if msg["sender"] != "cli":
-                console.print(msg["body"])
-                last_ts = msg["timestamp"]
-                if not follow:
-                    return
-        time.sleep(2)
+    codebase = resp.json().get("codebase", "")
+    if not codebase:
+        console.print(f"[red]cogamer '{name}' has no codebase URL[/red]")
+        sys.exit(1)
+    dest = path or name
+    console.print(f"[dim]Cloning {codebase} → {dest}[/dim]")
+    subprocess.run(["git", "clone", codebase, dest], check=True)
+    console.print(f"[green]Cloned to {dest}[/green]")
 
 
-@_cogamer_commands.group(invoke_without_command=True)
-@click.pass_context
-def secret(ctx: click.Context) -> None:
-    """Manage secrets. Subcommands: list, get, set."""
-    if ctx.invoked_subcommand is None:
-        click.echo(ctx.get_help())
-
-
-@secret.command("list")
-@click.pass_context
-def secret_list(ctx: click.Context) -> None:
-    """List secret keys."""
-    name = _name(ctx.parent)  # type: ignore[arg-type]
-    resp = _api.get(_url(f"/cogamers/{name}/secrets"))
-    _check(resp)
-    keys = resp.json().get("keys", [])
-    if not keys:
-        console.print("[dim]No secrets set[/dim]")
-    else:
-        for k in keys:
-            console.print(k)
-
-
-@secret.command("get")
-@click.argument("key")
-@click.pass_context
-def secret_get(ctx: click.Context, key: str) -> None:
-    """Get a secret value."""
-    name = _name(ctx.parent)  # type: ignore[arg-type]
-    resp = _api.get(_url(f"/cogamers/{name}/secrets/{key}"))
-    _check(resp)
-    console.print(resp.json().get("value", ""))
-
-
-@secret.command("set")
-@click.argument("pairs", nargs=-1, required=True)
-@click.pass_context
-def secret_set(ctx: click.Context, pairs: tuple[str, ...]) -> None:
-    """Set secrets. Usage: cogamer <name> secret set KEY=VALUE ..."""
-    name = _name(ctx.parent)  # type: ignore[arg-type]
-    secrets = {}
-    for pair in pairs:
-        if "=" not in pair:
-            console.print(f"[red]Invalid format: {pair} (expected KEY=VALUE)[/red]")
-            sys.exit(1)
-        k, v = pair.split("=", 1)
-        secrets[k] = v
-    resp = _api.put(_url(f"/cogamers/{name}/secrets"), json={"secrets": secrets})
-    _check(resp)
-    console.print("[green]Secrets updated[/green]")
-
-
-@_cogamer_commands.command()
-@click.argument("pairs", nargs=-1, required=True)
-@click.pass_context
-def config(ctx: click.Context, pairs: tuple[str, ...]) -> None:
-    """Get or set config and MCP servers.
-
-    Usage:
-      cogamer <name> config key=value ...        Set config values
-      cogamer <name> config key                  Get config values
-      cogamer <name> config mcp.name=url         Add MCP server (restart required)
-      cogamer <name> config mcp.name=            Remove MCP server
-    """
-    name = _name(ctx)
-    if any("=" in p for p in pairs):
-        cfg = {}
-        mcp = {}
-        mcp_removes = []
-        for pair in pairs:
-            if "=" not in pair:
-                console.print(f"[red]Invalid format: {pair} (expected key=value)[/red]")
-                sys.exit(1)
-            k, v = pair.split("=", 1)
-            if k.startswith("mcp."):
-                mcp_name = k[4:]
-                if v:
-                    mcp[mcp_name] = v
-                else:
-                    mcp_removes.append(mcp_name)
-            else:
-                cfg[k] = v
-        if cfg:
-            resp = _api.put(_url(f"/cogamers/{name}/config"), json={"config": cfg})
-            _check(resp)
-            console.print("[green]Config updated[/green]")
-        if mcp:
-            resp = _api.put(_url(f"/cogamers/{name}/mcp"), json={"mcp_servers": mcp})
-            _check(resp)
-            console.print(f"[green]MCP servers updated: {', '.join(mcp.keys())}[/green]")
-            console.print("[dim]Restart to apply[/dim]")
-        if mcp_removes:
-            # Fetch current, remove keys, overwrite
-            resp = _api.get(_url(f"/cogamers/{name}"))
-            _check(resp)
-            current = resp.json().get("mcp_servers", {})
-            for rm in mcp_removes:
-                current.pop(rm, None)
-            # Direct DB update via config workaround — use put with full set
-            # For now, we need a dedicated endpoint; warn user
-            console.print("[yellow]MCP server removal requires restart to take effect[/yellow]")
-    else:
-        resp = _api.get(_url(f"/cogamers/{name}"))
-        _check(resp)
-        data = resp.json()
-        cfg_data = data.get("config", {})
-        mcp_data = data.get("mcp_servers", {})
-        for key in pairs:
-            if key == "mcp":
-                if mcp_data:
-                    for k, v in mcp_data.items():
-                        console.print(f"[bold]mcp.{k}:[/bold] {v}")
-                else:
-                    console.print("[dim]No MCP servers configured[/dim]")
-            elif key.startswith("mcp."):
-                mcp_name = key[4:]
-                value = mcp_data.get(mcp_name, "[not set]")
-                console.print(f"[bold]{key}:[/bold] {value}")
-            else:
-                value = cfg_data.get(key, "[not set]")
-                console.print(f"[bold]{key}:[/bold] {value}")
-
-
-@_cogamer_commands.command()
+@ctl.command("pull")
 @click.option("--upstream", is_flag=True, help="Sync cogbase from upstream first")
 @click.pass_context
-def pull(ctx: click.Context, upstream: bool) -> None:
-    """Pull latest cogbase changes into the cogamer's repo."""
-    name = _name(ctx)
+def ctl_pull(ctx: click.Context, upstream: bool) -> None:
+    """Pull latest changes into the cogamer's repo."""
+    name = _name(ctx.parent.parent)  # type: ignore[arg-type]
 
     if upstream:
-        # Get the cogbase repo from the codebase URL
-        resp = _api.get(_url(f"/cogamers/{name}"))
+        resp = _api.get(_url(f"/cogamer/{name}"))
         _check(resp)
         codebase = resp.json().get("codebase", "")
-        # git@github.com:user/repo.git -> user/repo
         repo = codebase.replace("git@github.com:", "").replace(".git", "")
-        # Get upstream repo name
         upstream_result = subprocess.run(
             ["gh", "repo", "view", repo, "--json", "parent", "-q", '.parent.owner.login + "/" + .parent.name'],
             capture_output=True,
@@ -900,11 +910,7 @@ def pull(ctx: click.Context, upstream: bool) -> None:
         )
         upstream_name = upstream_result.stdout.strip() if upstream_result.returncode == 0 else "upstream"
         console.print(f"[dim]Syncing {repo} from {upstream_name}...[/dim]")
-        result = subprocess.run(
-            ["gh", "repo", "sync", repo],
-            capture_output=True,
-            text=True,
-        )
+        result = subprocess.run(["gh", "repo", "sync", repo], capture_output=True, text=True)
         if result.returncode == 0:
             console.print(f"[green]Synced with {upstream_name}[/green]")
         else:
@@ -920,12 +926,12 @@ def pull(ctx: click.Context, upstream: bool) -> None:
         console.print(f"[red]{result.stderr.strip()}[/red]")
 
 
-@_cogamer_commands.command()
+@ctl.command("wipe")
 @click.option("--full", is_flag=True, help="Reset all of .claude/ (not just memory)")
 @click.pass_context
-def wipe(ctx: click.Context, full: bool) -> None:
-    """Reset .claude/memory/, memory/, and runtime/. With --full, reset all of .claude/."""
-    name = _name(ctx)
+def ctl_wipe(ctx: click.Context, full: bool) -> None:
+    """Reset .claude/memory/, memory/, and runtime/."""
+    name = _name(ctx.parent.parent)  # type: ignore[arg-type]
     ip = _get_cogamer_ip(name)
     claude_target = ".claude" if full else ".claude/memory"
     wipe_cmd = f"cd ~/repo && rm -rf {claude_target} ; rm -rf memory ; rm -rf runtime"
@@ -936,14 +942,14 @@ def wipe(ctx: click.Context, full: bool) -> None:
         console.print(f"[red]{result.stderr.strip()}[/red]")
 
 
-@_cogamer_commands.command()
-@click.option("--since", default="10m", help="How far back to fetch logs (e.g. 5m, 1h, 2d). Default: 10m")
-@click.option("--max", "max_lines", default=200, type=int, help="Max log lines to show. Default: 200")
+@ctl.command("logs")
+@click.option("--since", default="10m", help="How far back (e.g. 5m, 1h, 2d). Default: 10m")
+@click.option("--max", "max_lines", default=200, type=int, help="Max lines. Default: 200")
 @click.pass_context
-def logs(ctx: click.Context, since: str, max_lines: int) -> None:
-    """Show CloudWatch logs for the cogamer."""
-    name = _name(ctx)
-    resp = _api.get(_url(f"/cogamers/{name}"))
+def ctl_logs(ctx: click.Context, since: str, max_lines: int) -> None:
+    """Show CloudWatch logs."""
+    name = _name(ctx.parent.parent)  # type: ignore[arg-type]
+    resp = _api.get(_url(f"/cogamer/{name}"))
     _check(resp)
     data = resp.json()
 
@@ -959,7 +965,6 @@ def logs(ctx: click.Context, since: str, max_lines: int) -> None:
     session = get_aws_session()
     client = session.client("logs", region_name="us-east-1")
 
-    # Parse --since into millisecond timestamp
     import re
 
     m = re.fullmatch(r"(\d+)([smhd])", since)
