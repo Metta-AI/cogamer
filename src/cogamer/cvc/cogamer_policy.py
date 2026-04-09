@@ -305,6 +305,9 @@ class CvCPolicy(MultiAgentPolicy):
             }
             all_llm.extend(st.llm_log)
             all_snaps.extend(st.snapshot_log)
+            if gs is not None:
+                gs.recorder.dump(learnings_dir / f"{self._game_id}_a{aid}.jsonl")
+                gs.recorder.dump_events(learnings_dir / f"{self._game_id}_a{aid}_events.jsonl")
 
         learnings = {
             "game_id": self._game_id,

@@ -28,6 +28,7 @@ except ImportError:
 
 
 from cogamer.cvc.agent import KnownEntity, manhattan, team_id
+from cogamer.cvc.recorder import JunctionEvent, StepRecord
 from mettagrid.simulator import Action
 
 _ELEMENTS = ("carbon", "oxygen", "germanium", "silicon")
@@ -79,6 +80,20 @@ def _known_junctions(gs: Any, predicate: Any = None) -> list[KnownEntity]:
     return gs.known_junctions(predicate)
 
 
+def _known_entities(gs: Any, entity_type: str | None = None) -> list[KnownEntity]:
+    """All entities the agent has ever seen. The persistent map."""
+    return gs.known_entities(entity_type=entity_type)
+
+
+def _nearest_entity(
+    gs: Any,
+    entity_type: str | None = None,
+    position: tuple[int, int] | None = None,
+) -> KnownEntity | None:
+    """Nearest known entity of a given type, from agent's position or a given position."""
+    return gs.nearest_entity(entity_type=entity_type, position=position)
+
+
 def _safe_distance(gs: Any) -> int:
     hub = gs.nearest_hub()
     if hub is None:
@@ -104,6 +119,46 @@ def _is_stalled(gs: Any) -> bool:
 
 def _is_oscillating(gs: Any) -> bool:
     return gs.oscillation_steps >= 4
+
+
+# ---------------------------------------------------------------------------
+# History query programs — read from GameRecorder
+# ---------------------------------------------------------------------------
+
+
+def _game_log(gs: Any, last_n: int | None = None) -> list[StepRecord]:
+    """Full per-step game log. Pass last_n to get the most recent N steps."""
+    return gs.recorder.steps(last_n=last_n)
+
+
+def _junction_events(gs: Any, last_n_steps: int | None = None) -> list[JunctionEvent]:
+    """Junction ownership changes. Pass last_n_steps to filter to recent history."""
+    return gs.recorder.junction_events(last_n_steps=last_n_steps, step=gs.step_index)
+
+
+def _junction_losses(gs: Any, last_n_steps: int | None = None) -> list[JunctionEvent]:
+    """Friendly junctions lost (was ours, now isn't)."""
+    return gs.recorder.junction_losses(team=gs.team_id(), last_n_steps=last_n_steps, step=gs.step_index)
+
+
+def _junction_gains(gs: Any, last_n_steps: int | None = None) -> list[JunctionEvent]:
+    """Friendly junctions gained (wasn't ours, now is)."""
+    return gs.recorder.junction_gains(team=gs.team_id(), last_n_steps=last_n_steps, step=gs.step_index)
+
+
+def _enemy_sightings(
+    gs: Any,
+    near: tuple[int, int] | None = None,
+    radius: int = 15,
+    last_n: int | None = None,
+) -> list[tuple[int, tuple[int, int]]]:
+    """Enemy agent sightings as (step, position). Filter by proximity and/or recency."""
+    return gs.recorder.enemy_sightings(near=near, radius=radius, last_n=last_n)
+
+
+def _positions_visited(gs: Any) -> int:
+    """Number of unique grid cells this agent has occupied."""
+    return gs.recorder.unique_positions_visited()
 
 
 # ---------------------------------------------------------------------------
@@ -298,12 +353,21 @@ def all_programs() -> dict[str, Program]:
         "nearest_hub": Program(executor="code", fn=_nearest_hub),
         "nearest_extractor": Program(executor="code", fn=_nearest_extractor),
         "known_junctions": Program(executor="code", fn=_known_junctions),
+        "known_entities": Program(executor="code", fn=_known_entities),
+        "nearest_entity": Program(executor="code", fn=_nearest_entity),
         "safe_distance": Program(executor="code", fn=_safe_distance),
         "has_role_gear": Program(executor="code", fn=_has_role_gear),
         "team_can_afford_gear": Program(executor="code", fn=_team_can_afford_gear),
         "needs_emergency_mining": Program(executor="code", fn=_needs_emergency_mining),
         "is_stalled": Program(executor="code", fn=_is_stalled),
         "is_oscillating": Program(executor="code", fn=_is_oscillating),
+        # History query programs
+        "game_log": Program(executor="code", fn=_game_log),
+        "junction_events": Program(executor="code", fn=_junction_events),
+        "junction_losses": Program(executor="code", fn=_junction_losses),
+        "junction_gains": Program(executor="code", fn=_junction_gains),
+        "enemy_sightings": Program(executor="code", fn=_enemy_sightings),
+        "positions_visited": Program(executor="code", fn=_positions_visited),
         # Action programs
         "action": Program(executor="code", fn=_action),
         "move_to": Program(executor="code", fn=_move_to),
