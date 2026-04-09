@@ -10,8 +10,12 @@ import subprocess
 import sys
 import time
 
-from cogamer_api.db import CogamerDB
-from cogamer_api.secrets import CogamerSecrets
+try:
+    from cogamer_api.db import CogamerDB
+    from cogamer_api.secrets import CogamerSecrets
+except ImportError:
+    CogamerDB = None  # type: ignore[assignment,misc]
+    CogamerSecrets = None  # type: ignore[assignment,misc]
 
 
 def _render_template(template_name: str, variables: dict[str, str], repo_dir: str | None = None) -> str:
