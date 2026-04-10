@@ -1,0 +1,13 @@
+{
+  "enabledPlugins": {
+    "cogamer@softmax-plugins": true
+  },
+  "extraKnownMarketplaces": {
+    "softmax-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "Metta-AI/softmax-plugins"
+      }
+    }
+  }
+}
