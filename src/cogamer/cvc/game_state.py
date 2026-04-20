@@ -15,13 +15,19 @@ from cogamer.cvc.agent import (
     has_role_gear,
     inventory_signature,
     is_usable_recent_extractor,
+    manhattan,
     needs_emergency_mining,
     resource_priority,
     team_can_afford_gear,
     team_id,
+    within_alignment_network,
+    _GEAR_COSTS,
+    _ELEMENTS,
+    _JUNCTION_ALIGN_DISTANCE,
 )
 from cogamer.cvc.agent.coglet_policy import CogletAgentPolicy
 from cogamer.cvc.agent.world_model import WorldModel
+from cogamer.cvc.recorder import GameRecorder
 from cogames.sdk.cogsguard import CogsguardSemanticSurface
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 from mettagrid.sdk.agent import MettagridState
@@ -29,7 +35,6 @@ from mettagrid.simulator import Action
 from mettagrid.simulator.interface import AgentObservation
 
 _COGSGUARD_SURFACE = CogsguardSemanticSurface()
-_ELEMENTS = ("carbon", "oxygen", "germanium", "silicon")
 
 
 class GameState:
@@ -57,6 +62,7 @@ class GameState:
         self.agent_id = agent_id
         self.role: str = "miner"
         self.mg_state: MettagridState | None = None
+        self.recorder = GameRecorder()
 
         # Expose action validation info for backward compat
         self.action_names: set[str] = set(policy_env_info.action_names)
@@ -86,12 +92,6 @@ class GameState:
         engine._world_model.update(state)
         engine._update_junctions(state)
         current_pos = absolute_position(state)
-        engine._world_model.prune_missing_extractors(
-            current_position=current_pos,
-            visible_entities=state.visible_entities,
-            obs_width=engine.policy_env_info.obs_width,
-            obs_height=engine.policy_env_info.obs_height,
-        )
 
         # Navigation infrastructure
         engine._update_temp_blocks(current_pos)
@@ -113,6 +113,12 @@ class GameState:
 
         # Store for bookkeeping at end of step
         self.mg_state = state
+
+        # Record events for query tooling (hub already computed by _update_junctions)
+        hub = getattr(engine, "_last_hub", None)
+        hub_pos = hub.position if hub else None
+        self.recorder.record_step(state, engine._junctions, hub_pos)
+
         return state
 
     def finalize_step(self, summary: str) -> None:
@@ -283,14 +289,232 @@ class GameState:
             predicate = lambda e: True  # noqa: E731
         return self.engine._known_junctions(self.mg_state, predicate=predicate)
 
+    def known_entities(self, entity_type: str | None = None) -> list[KnownEntity]:
+        """All entities the agent has ever seen, optionally filtered by type."""
+        return self.world_model.entities(entity_type=entity_type)
+
+    def nearest_entity(
+        self,
+        entity_type: str | None = None,
+        position: tuple[int, int] | None = None,
+    ) -> KnownEntity | None:
+        """Nearest known entity, optionally filtered by type. Defaults to agent's current position."""
+        if position is None:
+            assert self.mg_state is not None
+            position = absolute_position(self.mg_state)
+        return self.world_model.nearest(position=position, entity_type=entity_type)
+
     def team_id(self) -> str:
         assert self.mg_state is not None
         return team_id(self.mg_state)
+
+    def teammate_roles(self) -> list[KnownEntity]:
+        """Last observed state for each teammate ever seen.
+
+        Role is in entity.attributes["role"]. Position updates when
+        the teammate re-enters viewport. Check .last_seen_step for freshness.
+        """
+        assert self.mg_state is not None
+        return self.world_model.agents(team=team_id(self.mg_state))
+
+    def enemy_agents(self) -> list[KnownEntity]:
+        """Last observed state for each enemy agent ever seen."""
+        assert self.mg_state is not None
+        own_team = team_id(self.mg_state)
+        return [a for a in self.world_model.agents() if a.team != own_team]
+
+    def teammate_role_counts(self) -> dict[str, int]:
+        """Role distribution across all teammates ever observed."""
+        counts: dict[str, int] = {}
+        for entity in self.teammate_roles():
+            role = str(entity.attributes.get("role", "unknown"))
+            counts[role] = counts.get(role, 0) + 1
+        return counts
+
+    def agent_sightings(self, entity_id: str, *, last_n: int | None = None) -> list[KnownEntity]:
+        """Full sighting history for one agent."""
+        return self.world_model.agent_sightings(entity_id, last_n=last_n)
+
+    def sightings_near(
+        self,
+        position: tuple[int, int],
+        *,
+        radius: int = 15,
+        team: str | None = None,
+        last_n_steps: int | None = None,
+    ) -> list[KnownEntity]:
+        """All agent sightings within radius of a position, optionally recent only."""
+        since = 0 if last_n_steps is None else self.step_index - last_n_steps
+        return self.world_model.sightings_near(position, radius=radius, team=team, since_step=since)
+
+    # ── Junction Contestedness ───────────────────────────────────────
+
+    def junction_churn(self, position: tuple[int, int], last_n_steps: int = 500) -> int:
+        """Ownership changes at this junction in the last N steps."""
+        events = self.recorder.junction_events(last_n_steps=last_n_steps, step=self.step_index)
+        return sum(1 for e in events if e.position == position)
+
+    def contested_junctions(self, last_n_steps: int = 500, min_changes: int = 2) -> list[tuple[tuple[int, int], int]]:
+        """Junctions ranked by churn (descending). High churn = resource sink."""
+        events = self.recorder.junction_events(last_n_steps=last_n_steps, step=self.step_index)
+        counts: dict[tuple[int, int], int] = {}
+        for e in events:
+            counts[e.position] = counts.get(e.position, 0) + 1
+        return sorted(
+            ((pos, n) for pos, n in counts.items() if n >= min_changes),
+            key=lambda t: -t[1],
+        )
+
+    # ── Game Tempo ───────────────────────────────────────────────────
+
+    def junction_balance(self) -> tuple[int, int, int]:
+        """(friendly, enemy, neutral) junction counts from shared junction dict."""
+        assert self.mg_state is not None
+        team = team_id(self.mg_state)
+        friendly = enemy = neutral = 0
+        for (owner, _step) in self.engine._junctions.values():
+            if owner is None:
+                neutral += 1
+            elif owner == team:
+                friendly += 1
+            else:
+                enemy += 1
+        return (friendly, enemy, neutral)
+
+    def junction_trend(self, last_n_steps: int = 500) -> int:
+        """Net junction gains minus losses. Positive = gaining ground."""
+        assert self.mg_state is not None
+        team = team_id(self.mg_state)
+        gains = self.recorder.junction_gains(team=team, last_n_steps=last_n_steps, step=self.step_index)
+        losses = self.recorder.junction_losses(team=team, last_n_steps=last_n_steps, step=self.step_index)
+        return len(gains) - len(losses)
+
+    # ── Resource Gap ─────────────────────────────────────────────────
+
+    def resource_gap(self, role: str) -> dict[str, int]:
+        """Per-element shortfall for gear. Empty dict if affordable."""
+        assert self.mg_state is not None
+        costs = _GEAR_COSTS.get(role)
+        if costs is None:
+            return {}
+        inventory = {} if self.mg_state.team_summary is None else self.mg_state.team_summary.shared_inventory
+        gap: dict[str, int] = {}
+        for resource, needed in costs.items():
+            have = int(inventory.get(resource, 0))
+            if have < needed:
+                gap[resource] = needed - have
+        return gap
+
+    def mining_trips_needed(self, role: str) -> int:
+        """Estimated mining trips to afford gear (10 per trip with miner gear, 1 without)."""
+        assert self.mg_state is not None
+        gap = self.resource_gap(role)
+        if not gap:
+            return 0
+        worst = max(gap.values())
+        yield_per_trip = 10 if has_role_gear(self.mg_state, "miner") else 1
+        return (worst + yield_per_trip - 1) // yield_per_trip
+
+    # ── Threat Assessment ────────────────────────────────────────────
+
+    def enemy_activity(self, position: tuple[int, int], radius: int = 15, last_n_steps: int = 200) -> int:
+        """Enemy sighting count near position in recent history."""
+        assert self.mg_state is not None
+        own_team = team_id(self.mg_state)
+        since = self.step_index - last_n_steps
+        sightings = self.world_model.sightings_near(position, radius=radius, since_step=since)
+        return sum(1 for s in sightings if s.team != own_team)
+
+    def safest_target(self, candidates: list[KnownEntity], last_n_steps: int = 200) -> KnownEntity | None:
+        """Candidate with lowest nearby enemy activity."""
+        if not candidates:
+            return None
+        return min(candidates, key=lambda c: self.enemy_activity(c.position, last_n_steps=last_n_steps))
+
+    # ── Network Topology ─────────────────────────────────────────────
+
+    def frontier_junctions(self) -> list[KnownEntity]:
+        """Neutral junctions within alignment range of our network — capturable now."""
+        assert self.mg_state is not None
+        team = team_id(self.mg_state)
+        friendly = self.known_junctions(predicate=lambda e: e.owner == team)
+        hub = self.nearest_hub()
+        sources: list[KnownEntity] = list(friendly)
+        if hub is not None:
+            sources.append(hub)
+        neutrals = self.known_junctions(predicate=lambda e: e.owner is None)
+        return [j for j in neutrals if within_alignment_network(j.position, sources)]
+
+    def isolated_junctions(self) -> list[KnownEntity]:
+        """Our junctions with no adjacent friendly junction — vulnerable to cascade disconnect."""
+        assert self.mg_state is not None
+        team = team_id(self.mg_state)
+        friendly = self.known_junctions(predicate=lambda e: e.owner == team)
+        positions = {j.position for j in friendly}
+        result = []
+        for j in friendly:
+            has_neighbor = any(
+                manhattan(j.position, other) <= _JUNCTION_ALIGN_DISTANCE
+                for other in positions
+                if other != j.position
+            )
+            if not has_neighbor:
+                result.append(j)
+        return result
+
+    # ── Heart Economy ─────────────────────────────────────────────────
+
+    def heart_pressure(self) -> tuple[int, int]:
+        """(hearts_held, hearts_craftable_from_hub). Each heart costs 7 of every element."""
+        assert self.mg_state is not None
+        held = int(self.mg_state.self_state.inventory.get("heart", 0))
+        if self.mg_state.team_summary is None:
+            return (held, 0)
+        inventory = self.mg_state.team_summary.shared_inventory
+        hub_hearts = int(inventory.get("heart", 0))
+        min_resource = min(int(inventory.get(e, 0)) for e in _ELEMENTS)
+        return (held, hub_hearts + min_resource // 7)
+
+    # ── Role Gap ─────────────────────────────────────────────────────
+
+    def role_gap(self) -> dict[str, int]:
+        """Desired minus actual role counts. Positive = underserved.
+
+        WARNING: Use as a soft signal, not a hard constraint. If multiple
+        agents independently force-switch to fill a gap on the same tick,
+        they overshoot and create the opposite gap, causing a role-cycling
+        loop. Prefer gentle nudges (e.g. only switch if gap >= 2) and
+        hysteresis (don't switch back within N steps of switching).
+        """
+        assert self.mg_state is not None
+        desired = self.engine._pressure_budgets(self.mg_state)
+        actual = self.teammate_role_counts()
+        roles = set(desired) | set(actual)
+        return {r: desired.get(r, 0) - actual.get(r, 0) for r in roles}
+
+    # ── Spatial Basics ───────────────────────────────────────────────
+
+    def distance_to(self, target: tuple[int, int]) -> int:
+        """Manhattan distance from current position."""
+        return manhattan(self.position, target)
+
+    def entities_within(
+        self,
+        position: tuple[int, int],
+        radius: int,
+        entity_type: str | None = None,
+    ) -> list[KnownEntity]:
+        """All known entities within Manhattan radius of a position."""
+        return self.world_model.entities(
+            entity_type=entity_type,
+            predicate=lambda e: manhattan(position, e.position) <= radius,
+        )
 
     # ── Reset ─────────────────────────────────────────────────────────
 
     def reset(self) -> None:
         """Clear all state between episodes."""
         self.engine.reset()
+        self.recorder.reset()
         self.mg_state = None
         self.role = "miner"

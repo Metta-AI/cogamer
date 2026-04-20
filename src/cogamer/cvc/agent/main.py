@@ -104,12 +104,6 @@ class CvcEngine(RolesMixin, NavigationMixin, TargetingMixin, PressureMixin, Junc
 
         self._world_model.update(state)
         self._update_junctions(state)
-        self._world_model.prune_missing_extractors(
-            current_position=absolute_position(state),
-            visible_entities=state.visible_entities,
-            obs_width=self.policy_env_info.obs_width,
-            obs_height=self.policy_env_info.obs_height,
-        )
         current_pos = absolute_position(state)
         self._update_temp_blocks(current_pos)
         self._update_stall_counter(state, current_pos)

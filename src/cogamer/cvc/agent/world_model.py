@@ -11,19 +11,18 @@ from mettagrid.sdk.agent import MettagridState, SemanticEntity
 class WorldModel:
     def __init__(self) -> None:
         self._entities: dict[str, KnownEntity] = {}
+        self._agent_sightings: dict[str, list[KnownEntity]] = {}
 
     def reset(self) -> None:
         self._entities.clear()
+        self._agent_sightings.clear()
 
     def update(self, state: MettagridState) -> None:
         step = state.step or 0
         for entity in state.visible_entities:
-            if entity.entity_type == "agent":
-                continue
             global_x = attr_int(entity, "global_x", entity.position.x)
             global_y = attr_int(entity, "global_y", entity.position.y)
-            key = f"{entity.entity_type}@{global_x},{global_y}"
-            self._entities[key] = KnownEntity(
+            known = KnownEntity(
                 entity_type=entity.entity_type,
                 global_x=global_x,
                 global_y=global_y,
@@ -33,6 +32,14 @@ class WorldModel:
                 last_seen_step=step,
                 attributes=dict(entity.attributes),
             )
+            # Agents move — key by entity_id so position updates in place.
+            # Static objects are keyed by position (stable).
+            if entity.entity_type == "agent":
+                key = entity.entity_id
+                self._agent_sightings.setdefault(key, []).append(known)
+            else:
+                key = f"{entity.entity_type}@{global_x},{global_y}"
+            self._entities[key] = known
 
     def prune_missing_extractors(
         self,
@@ -66,6 +73,49 @@ class WorldModel:
         ]
         for key in stale_keys:
             self._entities.pop(key, None)
+
+    def agents(self, *, team: str | None = None) -> list[KnownEntity]:
+        result = []
+        for entity in self._entities.values():
+            if entity.entity_type != "agent":
+                continue
+            if team is not None and entity.team != team:
+                continue
+            result.append(entity)
+        return result
+
+    def agent_sightings(
+        self,
+        entity_id: str,
+        *,
+        last_n: int | None = None,
+    ) -> list[KnownEntity]:
+        """Full sighting history for one agent. Each entry is a snapshot
+        from the tick it was observed — position, role, team, attributes."""
+        history = self._agent_sightings.get(entity_id, [])
+        if last_n is None:
+            return list(history)
+        return history[-last_n:]
+
+    def sightings_near(
+        self,
+        position: tuple[int, int],
+        *,
+        radius: int = 15,
+        team: str | None = None,
+        since_step: int = 0,
+    ) -> list[KnownEntity]:
+        """All agent sightings within radius of a position since a given step."""
+        result = []
+        for sightings in self._agent_sightings.values():
+            for s in sightings:
+                if s.last_seen_step < since_step:
+                    continue
+                if team is not None and s.team != team:
+                    continue
+                if manhattan(position, s.position) <= radius:
+                    result.append(s)
+        return result
 
     def entities(
         self,

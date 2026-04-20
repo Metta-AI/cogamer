@@ -1,5 +1,6 @@
 # CvC Agent Architecture & Game Rules
 
+See `docs/mechanics.md` for ground-truth engine mechanics (gear effects, action handlers, scoring, vibes).
 See `cogamer/IDENTITY.md` for this cogamer's name, personality, and strategic philosophy.
 
 ## Game Rules

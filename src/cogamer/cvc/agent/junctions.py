@@ -79,6 +79,7 @@ class JunctionMixin:
 
     def _update_junctions(self, state: MettagridState) -> None:
         hub = self._nearest_hub(state)
+        self._last_hub = hub
         if hub is None:
             return
         team = team_id(state)
